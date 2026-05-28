@@ -75,8 +75,10 @@ window.addEventListener("keydown", (e) => {
 });
 poke();
 function toggleFullscreen() {
-  if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-  else document.exitFullscreen();
+  if (!document.fullscreenElement) {
+    hideHint();
+    document.documentElement.requestFullscreen();
+  } else document.exitFullscreen();
 }
 btnFull.onclick = toggleFullscreen;
 canvas.addEventListener("dblclick", toggleFullscreen);
@@ -97,7 +99,7 @@ if (env?.electron) {
     .catch((e) => console.log("AETHER_AUDIO fail", (e as Error)?.message));
   if (env.wallpaper) {
     document.body.classList.add("idle");
-    dropHint.classList.add("hidden");
+    hideHint();
   } else {
     dropHint.innerHTML =
       "<strong>Aether</strong>Drag anywhere to move this onto a monitor.<br />" +
@@ -108,9 +110,15 @@ if (env?.electron) {
 
 // The centre hint shows briefly on open, then goes away for good — and
 // immediately when going fullscreen — so it isn't always on screen.
-setTimeout(() => dropHint.classList.add("hidden"), 5000);
+// (Inline !important so no CSS rule can keep it visible.)
+function hideHint() {
+  dropHint.style.setProperty("opacity", "0", "important");
+  dropHint.style.pointerEvents = "none";
+  console.log("AETHER_HINT hidden");
+}
+setTimeout(hideHint, 5000);
 document.addEventListener("fullscreenchange", () => {
-  if (document.fullscreenElement) dropHint.classList.add("hidden");
+  if (document.fullscreenElement) hideHint();
 });
 
 // Debug hook for automated validation (read live audio state from the console).

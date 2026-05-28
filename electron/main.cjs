@@ -141,7 +141,7 @@ async function createWindow() {
   win.webContents.on("unresponsive", () => console.error("WINDOW_UNRESPONSIVE"));
   win.on("closed", () => console.log("WINDOW_CLOSED"));
   win.webContents.on("console-message", (_e, _lvl, msg) => {
-    if (String(msg).startsWith("AETHER_AUDIO")) console.log("R:", msg);
+    if (String(msg).startsWith("AETHER_")) console.log("R:", msg);
   });
 
   win.webContents.on("did-finish-load", () => {
