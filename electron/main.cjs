@@ -95,6 +95,7 @@ async function createWindow() {
   const opts = {
     backgroundColor: "#07060c",
     show: !SMOKE,
+    icon: path.join(__dirname, "..", "build", "icon.ico"),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       backgroundThrottling: false,

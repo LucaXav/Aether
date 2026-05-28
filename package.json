@@ -1,7 +1,7 @@
 {
-  "name": "capclu",
+  "name": "aether",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "electron/main.cjs",
   "repository": "https://github.com/LucaXav/capclu",
@@ -36,9 +36,11 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "build/icon.ico",
       "package.json"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "nsis",
         "portable"

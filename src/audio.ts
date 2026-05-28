@@ -8,6 +8,9 @@ export interface AudioData {
   bigBeat: number; // 0..1, fires on strong/periodic beats
   energy: number; // 0..1, slow overall level (drives flow pace / mood)
   tilt: number; // 0..1, spectral brightness (bass-heavy -> bright), slow
+  pace: number; // 0..1, tempo-ish: faster beats -> higher (drives motion speed)
+  accent: number; // 0..1, strength of the latest onset (snappy) -> direct beat hit
+  aggression: number; // 0..1, medium-smoothed intensity -> turbulence / "angry"
 }
 
 /**
@@ -40,6 +43,13 @@ export class AudioEngine {
   private bigBeatVal = 0;
   private energyS = 0;
   private tiltS = 0.5;
+  // tempo / pace
+  private lastBeatT = 0;
+  private beatIntervalS = 0.5;
+  private paceS = 0.4;
+  // beat strength + intensity tracking
+  private accentVal = 0;
+  private aggrS = 0;
 
   get isPlaying(): boolean {
     return !!this.audioEl && !this.audioEl.paused;
@@ -187,11 +197,41 @@ export class AudioEngine {
       this.bigBeatVal *= 0.92;
     }
 
+    // accent: how hard the latest onset hit. Sharpness (relative to the song's
+    // own average) is scaled by ABSOLUTE low-band loudness, so a soft lofi kick
+    // stays gentle while a punchy EDM kick hits hard. Snappy (decays fast).
+    if (fired) {
+      const sharp = clamp01(flux / (this.fluxAvg * 3 + 0.05));
+      const loud = clamp01(low * 1.6);
+      this.accentVal = Math.max(this.accentVal, sharp * (0.3 + 0.7 * loud));
+    } else {
+      this.accentVal *= 0.85;
+    }
+
+    // tempo / pace: shorter gaps between detected beats -> higher pace
+    if (fired) {
+      const gap = time - this.lastBeatT;
+      if (gap > 0.12 && gap < 2.0) {
+        this.beatIntervalS += (gap - this.beatIntervalS) * 0.3;
+      }
+      this.lastBeatT = time;
+    }
+    const paceTarget = clamp01((0.85 - this.beatIntervalS) / (0.85 - 0.28));
+    this.paceS += (paceTarget - this.paceS) * 0.02;
+
     // slow song-character signals
     const e = (this.sBass + this.sMid + this.sTreble) / 3;
     this.energyS += (e - this.energyS) * 0.02;
     const tilt = this.sTreble / (this.sBass + this.sTreble + 0.001);
     this.tiltS += (tilt - this.tiltS) * 0.02;
+
+    // aggression = the song's overall intensity / genre character: energy +
+    // tempo + brightness, with a wider range so a calm lofi track reads low and
+    // an upbeat EDM track reads high. (accent handles the per-beat hit on top.)
+    const aggrInst = clamp01(
+      (this.energyS * 0.45 + this.paceS * 0.35 + this.sTreble * 0.2) * 1.3
+    );
+    this.aggrS += (aggrInst - this.aggrS) * 0.04;
 
     return {
       bass: this.sBass,
@@ -201,6 +241,9 @@ export class AudioEngine {
       bigBeat: this.bigBeatVal,
       energy: this.energyS,
       tilt: this.tiltS,
+      pace: this.paceS,
+      accent: this.accentVal,
+      aggression: this.aggrS,
     };
   }
 
@@ -234,6 +277,8 @@ export class AudioEngine {
     const bigBeat = Math.max(0, 1.0 - bigPhase * 10.0);
     const energy = clamp01((bass + mid + treble) / 3);
     const tilt = 0.5 + 0.4 * Math.sin(time * 0.07); // slow drift in demo
+    const pace = clamp01(0.45 + 0.3 * Math.sin(time * 0.08));
+    const aggression = clamp01(0.25 + energy * 0.6);
     return {
       bass: clamp01(bass),
       mid: clamp01(mid),
@@ -242,6 +287,9 @@ export class AudioEngine {
       bigBeat,
       energy,
       tilt,
+      pace,
+      accent: beat, // the synthetic beat spike doubles as accent in demo
+      aggression,
     };
   }
 }

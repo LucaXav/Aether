@@ -3,11 +3,9 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { liquidVert, liquidFrag } from "./shaders";
+import { fullscreenVert, STYLES } from "./shaders";
 import { MOODS } from "./palette";
 import type { AudioData } from "./audio";
-
-const RIPPLES = 5;
 
 export class Visualizer {
   private renderer: THREE.WebGLRenderer;
@@ -18,27 +16,23 @@ export class Visualizer {
   private bloom: UnrealBloomPass;
   private clock = new THREE.Clock();
 
+  private styleIndex = 0;
+
   // smoothed audio (decoupled from snappy beat detection for fluid motion)
-  private sBass = 0;
   private sMid = 0;
   private sTreble = 0;
   private sEnergy = 0;
+  private sPace = 0.4;
+  private sAccent = 0;
 
-  // ripple slots
-  private ripplePos: THREE.Vector2[] = [];
-  private rippleAge: number[] = [];
-  private rippleAmp: number[] = [];
-  private rippleCursor = 0;
+  // beat-driven color (eased hue walk — recolors only, frame stays anchored)
+  private hueShift = 0;
+  private hueTarget = 0;
   private beatLatch = false;
   private bigLatch = false;
 
-  // beat-driven color + motion (eased, so nothing snaps)
-  private hueShift = 0; // current hue rotation (rad)
-  private hueTarget = 0; // beats walk this around; eased toward smoothly
-  private swirl = 0; // continuous field rotation
-  private swirlRate = 0.03; // rad/s, beats vary it
-  private flowDir = new THREE.Vector2(); // gliding drift, beats push it
-  private shape = 0.5; // morph 0..1
+  // slow in-place shape morph
+  private shape = 0.5;
   private shapePhase = 0;
 
   // mood crossfade
@@ -60,36 +54,27 @@ export class Visualizer {
     this.scene = new THREE.Scene();
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-    for (let i = 0; i < RIPPLES; i++) {
-      this.ripplePos.push(new THREE.Vector2());
-      this.rippleAge.push(99);
-      this.rippleAmp.push(0);
-    }
-
     this.c1.copy(MOODS[0].c1);
     this.c2.copy(MOODS[0].c2);
     this.c3.copy(MOODS[0].c3);
 
     this.material = new THREE.ShaderMaterial({
-      vertexShader: liquidVert,
-      fragmentShader: liquidFrag,
+      vertexShader: fullscreenVert,
+      fragmentShader: STYLES[0].frag,
       uniforms: {
         uTime: { value: 0 },
         uRes: { value: new THREE.Vector2(1, 1) },
         uEnergy: { value: 0 },
-        uBass: { value: 0 },
         uMid: { value: 0 },
         uTreble: { value: 0 },
+        uPace: { value: 0.4 },
+        uAccent: { value: 0 },
+        uAggr: { value: 0 },
         uC1: { value: this.c1 },
         uC2: { value: this.c2 },
         uC3: { value: this.c3 },
         uHueShift: { value: 0 },
-        uSwirl: { value: 0 },
-        uFlowDir: { value: this.flowDir },
         uShape: { value: 0.5 },
-        uRipplePos: { value: this.ripplePos },
-        uRippleAge: { value: this.rippleAge },
-        uRippleAmp: { value: this.rippleAmp },
       },
     });
     const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material);
@@ -107,6 +92,25 @@ export class Visualizer {
     window.addEventListener("resize", () => this.resize());
   }
 
+  get styleName(): string {
+    return STYLES[this.styleIndex].name;
+  }
+  get styleCount(): number {
+    return STYLES.length;
+  }
+
+  /** Switch to a style by index (clamped). Recompiles the fragment shader. */
+  setStyle(i: number): string {
+    this.styleIndex = THREE.MathUtils.clamp(i, 0, STYLES.length - 1);
+    this.material.fragmentShader = STYLES[this.styleIndex].frag;
+    this.material.needsUpdate = true;
+    return this.styleName;
+  }
+  /** Advance to the next style, wrapping around. */
+  cycleStyle(): string {
+    return this.setStyle((this.styleIndex + 1) % STYLES.length);
+  }
+
   private resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -120,84 +124,71 @@ export class Visualizer {
     this.material.uniforms.uRes.value.set(w, h);
   }
 
-  private spawnRipple(x: number, y: number, amp: number) {
-    const i = this.rippleCursor % RIPPLES;
-    this.ripplePos[i].set(x, y);
-    this.rippleAge[i] = 0;
-    this.rippleAmp[i] = amp;
-    this.rippleCursor++;
-  }
-
   render(a: AudioData) {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const t = this.clock.elapsedTime;
     const u = this.material.uniforms;
 
     // --- fluid smoothing: ease uniforms slowly toward the audio bands ---
-    this.sBass += (a.bass - this.sBass) * 0.06;
     this.sMid += (a.mid - this.sMid) * 0.06;
     this.sTreble += (a.treble - this.sTreble) * 0.08;
     this.sEnergy += (a.energy - this.sEnergy) * 0.03;
+    this.sPace += (a.pace - this.sPace) * 0.02;
     u.uTime.value = t;
-    u.uBass.value = this.sBass;
     u.uMid.value = this.sMid;
     u.uTreble.value = this.sTreble;
     u.uEnergy.value = this.sEnergy;
+    u.uPace.value = this.sPace;
+    // How lively the whole reaction is, set by the song's intensity: a calm
+    // lofi track barely reacts; an upbeat EDM track is lively (but never jumpy).
+    const react = 0.3 + 0.7 * a.aggression;
+    // accent drives the per-beat "hit"; lightly smoothed + scaled by intensity
+    this.sAccent += (a.accent - this.sAccent) * 0.4;
+    u.uAccent.value = this.sAccent * (0.15 + 0.6 * a.aggression);
+    u.uAggr.value = a.aggression;
 
-    // --- beats: instead of a brightness pulse, each beat recolors (hue walk),
-    //     glides the flow in a new direction, and nudges the shape morph ---
-    for (let i = 0; i < RIPPLES; i++) this.rippleAge[i] += dt;
+    // --- beats recolor: nudge the hue target and let it EASE there (only a tiny
+    //     instant move), so color drifts on the beat instead of jumping. ---
     if (a.beat > 0.6 && !this.beatLatch) {
       this.beatLatch = true;
-      // small random hue step -> color keeps changing over the song
-      this.hueTarget += (Math.random() - 0.5) * 0.9;
-      // gentle directional glide (smooth, decays over ~1s) -> different movement
-      const ang = Math.random() * Math.PI * 2;
-      this.flowDir.x += Math.cos(ang) * 0.12;
-      this.flowDir.y += Math.sin(ang) * 0.12;
-      // vary the rotation speed and direction a touch
-      this.swirlRate += (Math.random() - 0.5) * 0.05;
-      // a soft traveling ripple for texture
-      const rad = 0.6 + Math.random() * 1.4;
-      this.spawnRipple(Math.cos(ang) * rad, Math.sin(ang) * rad, 0.12 + a.beat * 0.08);
+      const mag = (Math.random() - 0.5) * (0.3 + a.accent * 0.8) * react;
+      this.hueTarget += mag;
+      this.hueShift += mag * 0.15; // small immediate move; the rest eases in
     } else if (a.beat < 0.3) {
       this.beatLatch = false;
     }
     if (a.bigBeat > 0.6 && !this.bigLatch) {
       this.bigLatch = true;
-      this.hueTarget += (Math.random() - 0.5) * 1.4; // bigger color shift
-      this.shapePhase += 1.1; // jump the shape morph -> different shapes
-      this.spawnRipple(0, 0, 0.32); // large, slow centered swell
+      const mag = (Math.random() - 0.5) * (0.6 + a.accent * 0.9) * react;
+      this.hueTarget += mag;
+      this.hueShift += mag * 0.35; // softer snap on big beats
     } else if (a.bigBeat < 0.3) {
       this.bigLatch = false;
     }
+    // continuous color drift: slow when calm, a bit faster when intense
+    this.hueTarget += dt * (0.03 + 0.06 * a.aggression);
+    this.hueShift += (this.hueTarget - this.hueShift) * 0.06; // gentle ease
+    u.uHueShift.value = this.hueShift;
 
-    // ease color + motion so beats glide instead of snapping
-    this.hueTarget += dt * 0.06; // slow continuous drift on top of beat steps
-    this.hueShift += (this.hueTarget - this.hueShift) * 0.05;
-    this.swirlRate += (0.03 - this.swirlRate) * 0.01; // relax back toward baseline
-    this.swirl += this.swirlRate * dt * (1 + this.sEnergy);
-    this.flowDir.multiplyScalar(0.94); // glide decays smoothly
-    this.flowDir.clampLength(0, 1.1);
-    this.shapePhase += dt * (0.05 + this.sMid * 0.06);
+    // --- slow shape morph: patterns change form in place (no zoom/translate) ---
+    this.shapePhase += dt * (0.05 + this.sMid * 0.05);
     const shapeTarget = THREE.MathUtils.clamp(
       0.5 + 0.4 * Math.sin(this.shapePhase) + 0.25 * (this.sMid - 0.3),
       0,
       1
     );
     this.shape += (shapeTarget - this.shape) * 0.03;
-
-    u.uHueShift.value = this.hueShift;
-    u.uSwirl.value = this.swirl;
     u.uShape.value = this.shape;
-    u.uRippleAge.value = this.rippleAge;
-    u.uRippleAmp.value = this.rippleAmp;
 
-    // --- mood drift: color follows the song's spectral character over time ---
-    this.moodDrift += dt * 0.02;
-    const target =
-      a.tilt * (MOODS.length - 1) * 0.7 +
-      (0.5 + 0.5 * Math.sin(this.moodDrift)) * (MOODS.length - 1) * 0.3;
+    // --- mood drift: the palette slowly evolves on its own so the look is never
+    //     the same for long, with a little nudge from the song's brightness.
+    //     Two decorrelated slow waves make it wander across moods (not just
+    //     back-and-forth); a full wander takes a few minutes. ---
+    this.moodDrift += dt * 0.025;
+    const wander =
+      (0.5 + 0.5 * Math.sin(this.moodDrift)) * 0.6 +
+      (0.5 + 0.5 * Math.sin(this.moodDrift * 0.37 + 1.3)) * 0.4;
+    const target = (wander * 0.7 + a.tilt * 0.3) * (MOODS.length - 1);
     this.moodPos += (target - this.moodPos) * 0.01;
     const idx = Math.floor(this.moodPos) % MOODS.length;
     const nxt = (idx + 1) % MOODS.length;
