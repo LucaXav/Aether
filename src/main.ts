@@ -106,6 +106,13 @@ if (env?.electron) {
   }
 }
 
+// The centre hint shows briefly on open, then goes away for good — and
+// immediately when going fullscreen — so it isn't always on screen.
+setTimeout(() => dropHint.classList.add("hidden"), 5000);
+document.addEventListener("fullscreenchange", () => {
+  if (document.fullscreenElement) dropHint.classList.add("hidden");
+});
+
 // Debug hook for automated validation (read live audio state from the console).
 const liveBands = { bass: 0, mid: 0, treble: 0, beat: 0 };
 (window as Window & { __capclu?: unknown }).__capclu = {
