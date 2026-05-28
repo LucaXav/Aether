@@ -117,13 +117,15 @@ async function createWindow() {
       title: WP_TITLE,
     });
   } else {
-    // windowed: a normal, movable, resizable window (drag it to any monitor;
-    // double-click to fullscreen on that monitor)
+    // chromeless, movable window: no title bar / no X. Drag it (by the visual)
+    // onto any monitor, then use the Fullscreen button (or double-click) to make
+    // it take the whole screen. Quit with Ctrl+Shift+Q or Alt+F4.
     Object.assign(opts, {
       width: 1280,
       height: 800,
       minWidth: 480,
       minHeight: 320,
+      frame: false,
       title: "capclu",
     });
   }
@@ -157,7 +159,8 @@ async function createWindow() {
 
   await win.loadURL(`http://127.0.0.1:${port}/${WALLPAPER ? "?wallpaper=1" : ""}`);
 
-  if (WALLPAPER && !SMOKE) {
+  if (!SMOKE) {
+    // frameless windows have no X button — always provide a quit shortcut
     globalShortcut.register("CommandOrControl+Shift+Q", () => app.quit());
   }
 }

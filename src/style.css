@@ -23,6 +23,18 @@ html, body {
   height: 100vh;
 }
 
+/* ---- frameless Electron: drag the window by the visual; keep UI clickable ---- */
+html,
+body {
+  -webkit-app-region: drag;
+}
+.controls,
+.hud,
+.controls button,
+.drop-hint {
+  -webkit-app-region: no-drag;
+}
+
 /* ---- idle: fade the UI away so it works as an ambient background ---- */
 .hud,
 .controls {

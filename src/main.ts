@@ -16,9 +16,12 @@ const btnLoad = byId<HTMLButtonElement>("btn-load");
 const btnPlay = byId<HTMLButtonElement>("btn-play");
 const btnMic = byId<HTMLButtonElement>("btn-mic");
 const btnDemo = byId<HTMLButtonElement>("btn-demo");
+const btnStyle = byId<HTMLButtonElement>("btn-style");
 const btnRec = byId<HTMLButtonElement>("btn-rec");
+const btnFull = byId<HTMLButtonElement>("btn-full");
 const fileInput = byId<HTMLInputElement>("file");
 const dropHint = byId<HTMLDivElement>("drop-hint");
+const brandStyle = document.querySelector(".brand span") as HTMLSpanElement | null;
 
 const barBass = byId<HTMLSpanElement>("bar-bass");
 const barMid = byId<HTMLSpanElement>("bar-mid");
@@ -82,6 +85,12 @@ btnRec.onclick = () => {
   btnRec.textContent = recorder.recording ? "■ Stop" : "● Rec";
 };
 
+function reflectStyle(name: string) {
+  btnStyle.textContent = "◆ " + name;
+  if (brandStyle) brandStyle.textContent = "· " + name;
+}
+btnStyle.onclick = () => reflectStyle(viz.cycleStyle());
+
 // drag & drop anywhere on the window
 window.addEventListener("dragover", (e) => {
   e.preventDefault();
@@ -107,10 +116,12 @@ function poke() {
 window.addEventListener("mousemove", poke);
 window.addEventListener("keydown", poke);
 poke();
-canvas.addEventListener("dblclick", () => {
+function toggleFullscreen() {
   if (!document.fullscreenElement) document.documentElement.requestFullscreen();
   else document.exitFullscreen();
-});
+}
+btnFull.onclick = toggleFullscreen;
+canvas.addEventListener("dblclick", toggleFullscreen);
 
 // In Electron wallpaper mode: hide the UI and auto-capture system (loopback)
 // audio so it reacts to whatever's playing with no interaction.
@@ -124,6 +135,12 @@ if (env?.wallpaper) {
     .useSystemAudio()
     .then(() => reflectMode("system"))
     .catch(() => {});
+} else if (env?.electron) {
+  // chromeless desktop window: tell the user how to move / fullscreen / quit
+  dropHint.innerHTML =
+    "<strong>capclu</strong>Drag anywhere to move this onto a monitor.<br />" +
+    "<b>⛶ Fullscreen</b> (or double-click) fills that screen · <b>Ctrl+Shift+Q</b> quits.<br />" +
+    "Hit <b>🖥 System audio</b> to react to whatever's playing.";
 }
 
 // Debug hook for automated validation (read live audio state from the console).
