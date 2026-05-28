@@ -108,28 +108,86 @@ void main() {
 }
 `;
 
-// --- Style: AURORA — soft flowing ribbons/curtains of light (calm, dreamy) ---
-const AURORA_MAIN = /* glsl */ `
-void main() {
-  vec2 p = aspect(vUv);
-  float t = uTime * (0.04 + uPace * 0.03 + uAggr * 0.05);
+// --- Style: SLIME — a gooey raymarched metaball blob that wobbles to the beat ---
+const SLIME_MAIN = /* glsl */ `
+float h31(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453123); }
+float n3(vec3 p){
+  vec3 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(mix(h31(i+vec3(0,0,0)), h31(i+vec3(1,0,0)), f.x),
+        mix(h31(i+vec3(0,1,0)), h31(i+vec3(1,1,0)), f.x), f.y),
+    mix(mix(h31(i+vec3(0,0,1)), h31(i+vec3(1,0,1)), f.x),
+        mix(h31(i+vec3(0,1,1)), h31(i+vec3(1,1,1)), f.x), f.y), f.z);
+}
+float fbm3(vec3 p){ float v=0.0, a=0.5; for(int i=0;i<3;i++){ v+=a*n3(p); p*=2.03; a*=0.5; } return v; }
+float smin(float a, float b, float k){ float h=clamp(0.5+0.5*(b-a)/k, 0.0, 1.0); return mix(b,a,h) - k*h*(1.0-h); }
 
-  vec3 col = uC1 * 0.5;
-  for (int i = 0; i < 5; i++) {
+float mapSlime(vec3 p){
+  float t = uTime;
+  // gooey jiggle: wobble the sampling space, stronger on the beat
+  float wob = 0.05 + uAccent * 0.12 + uEnergy * 0.04;
+  p.xy += wob * vec2(sin(t*2.0 + p.z*3.0), cos(t*1.7 + p.y*3.0));
+  // core blob; radius breathes with energy and swells on each beat
+  float r = 0.82 + uEnergy * 0.12 + uAccent * 0.22;
+  float d = length(p) - r;
+  // lumpy gooey surface (animated 3D noise)
+  float surf = fbm3(p * 1.7 + vec3(0.0, 0.0, t * 0.4));
+  d -= (surf - 0.5) * (0.30 + uAccent * 0.30 + uShape * 0.15);
+  // inner globs that orbit & merge with smooth-min -> stretchy splitting slime
+  for(int i=0;i<3;i++){
     float fi = float(i);
-    // each ribbon's centre line wavers with low-freq noise -> flowing curtain
-    float yc = (fi / 4.0 - 0.5) * 1.0;
-    float wav = (fbm(vec2(p.x * 1.4 + t + fi * 3.1, t * 0.5 + fi)) - 0.5) * 0.6;
-    float w = 4.5 + uAggr * 2.0;                  // tight ribbons with dark gaps
-    float band = exp(-pow((p.y - yc - wav) * w, 2.0));
-    // colour drifts along the ribbon
-    float cv = 0.25 + 0.7 * fbm(vec2(p.x * 0.9 + t * 0.6, fi * 2.0));
-    col += mix(uC2, uC3, cv) * band * 0.5;
+    float a = t*(0.5 + 0.13*fi) + fi*2.4;
+    vec3 c = vec3(cos(a), sin(a*1.1 + fi), sin(a*0.7)) * (0.7 + 0.12*sin(t+fi));
+    float rb = 0.28 + 0.10*sin(t*1.4 + fi) + uAccent*0.12;
+    d = smin(d, length(p - c) - rb, 0.40 + uShape*0.20);
   }
-  col += uTreble * 0.07 * uC3;
+  return d;
+}
+vec3 nrmSlime(vec3 p){
+  vec2 e = vec2(0.0025, 0.0);
+  return normalize(vec3(
+    mapSlime(p+e.xyy) - mapSlime(p-e.xyy),
+    mapSlime(p+e.yxy) - mapSlime(p-e.yxy),
+    mapSlime(p+e.yyx) - mapSlime(p-e.yyx)));
+}
+void main(){
+  vec2 p = aspect(vUv);
+  vec3 ro = vec3(0.0, 0.0, 3.0);
+  vec3 rd = normalize(vec3(p, -1.7));
+
+  float t = 0.0; float d = 0.0; bool hit = false;
+  for(int i=0;i<64;i++){
+    vec3 pos = ro + rd*t;
+    d = mapSlime(pos);
+    if(d < 0.0016){ hit = true; break; }
+    t += d * 0.85;
+    if(t > 6.0) break;
+  }
+
+  // background: deep, soft glow behind the blob
+  float bgv = smoothstep(1.5, 0.0, length(p));
+  vec3 col = mix(uC1 * 0.22, uC1 * 0.65, bgv);
+
+  if(hit){
+    vec3 pos = ro + rd*t;
+    vec3 n = nrmSlime(pos);
+    vec3 vd = normalize(-rd);
+    vec3 ld = normalize(vec3(0.5, 0.8, 0.6));
+    float diff = clamp(dot(n, ld), 0.0, 1.0);
+    vec3 hv = normalize(ld + vd);
+    float spec = pow(clamp(dot(n, hv), 0.0, 1.0), 50.0);      // wet glossy highlight
+    float fres = pow(1.0 - clamp(dot(n, vd), 0.0, 1.0), 2.5); // translucent goo rim
+
+    vec3 base = mix(uC1, uC2, 0.35 + 0.65*diff);
+    base = mix(base, uC3, fres * 0.55);          // gooey rim glow
+    base += uC3 * 0.14 * (0.5 + 0.5*diff);       // soft inner translucency
+    base += spec * mix(uC3, vec3(1.0), 0.6);     // wet shine
+    base += uTreble * 0.10 * spec * uC3;
+    col = base;
+  }
 
   col = hueShift(col, uHueShift);
-  col *= mix(0.5, 1.0, smoothstep(1.8, 0.2, length(p)));
   gl_FragColor = vec4(max(col, 0.0), 1.0);
 }
 `;
@@ -172,7 +230,7 @@ export interface VizStyle {
 }
 
 export const STYLES: VizStyle[] = [
+  { name: "slime", frag: PRELUDE + SLIME_MAIN },
   { name: "flow", frag: PRELUDE + FLOW_MAIN },
-  { name: "aurora", frag: PRELUDE + AURORA_MAIN },
   { name: "bokeh", frag: PRELUDE + BOKEH_MAIN },
 ];
