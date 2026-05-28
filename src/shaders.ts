@@ -154,7 +154,9 @@ vec3 nrmSlime(vec3 p){
 void main(){
   vec2 p = aspect(vUv);
   vec3 ro = vec3(0.0, 0.0, 3.0);
-  vec3 rd = normalize(vec3(p, -1.7));
+  // zoom > 1 widens the view so the blob sits centered with space around it
+  float zoom = 1.8;
+  vec3 rd = normalize(vec3(p * zoom, -1.7));
 
   float t = 0.0; float d = 0.0; bool hit = false;
   for(int i=0;i<64;i++){
