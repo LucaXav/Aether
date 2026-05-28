@@ -5,7 +5,9 @@ export interface AudioData {
   mid: number; // 0..1
   treble: number; // 0..1
   beat: number; // 0..1, spikes on a detected kick then decays
-  bigBeat: number; // 0..1, fires on strong/periodic beats -> structural events
+  bigBeat: number; // 0..1, fires on strong/periodic beats
+  energy: number; // 0..1, slow overall level (drives flow pace / mood)
+  tilt: number; // 0..1, spectral brightness (bass-heavy -> bright), slow
 }
 
 /**
@@ -36,6 +38,8 @@ export class AudioEngine {
   private beatCooldown = 0;
   private beatCounter = 0;
   private bigBeatVal = 0;
+  private energyS = 0;
+  private tiltS = 0.5;
 
   get isPlaying(): boolean {
     return !!this.audioEl && !this.audioEl.paused;
@@ -183,12 +187,20 @@ export class AudioEngine {
       this.bigBeatVal *= 0.92;
     }
 
+    // slow song-character signals
+    const e = (this.sBass + this.sMid + this.sTreble) / 3;
+    this.energyS += (e - this.energyS) * 0.02;
+    const tilt = this.sTreble / (this.sBass + this.sTreble + 0.001);
+    this.tiltS += (tilt - this.tiltS) * 0.02;
+
     return {
       bass: this.sBass,
       mid: this.sMid,
       treble: this.sTreble,
       beat: this.beatVal,
       bigBeat: this.bigBeatVal,
+      energy: this.energyS,
+      tilt: this.tiltS,
     };
   }
 
@@ -220,12 +232,16 @@ export class AudioEngine {
     // a big beat every ~2.7s
     const bigPhase = (time / 2.7) % 1.0;
     const bigBeat = Math.max(0, 1.0 - bigPhase * 10.0);
+    const energy = clamp01((bass + mid + treble) / 3);
+    const tilt = 0.5 + 0.4 * Math.sin(time * 0.07); // slow drift in demo
     return {
       bass: clamp01(bass),
       mid: clamp01(mid),
       treble: clamp01(treble),
       beat,
       bigBeat,
+      energy,
+      tilt,
     };
   }
 }

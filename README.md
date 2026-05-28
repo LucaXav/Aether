@@ -15,20 +15,24 @@ nebula shader react to bass/mid/treble with beat-driven pulses, and record the
 canvas to a `.webm`.
 
 What's wired up:
-- **3D "hybrid scene"** (not a flat pulsing shader): a deep starfield, ~4k GPU
-  particles streaming along a 3D curl flow-field, and a wireframe core + orbiting
-  shards. Beats burst the particles outward; **big beats** explode the shards and
-  the whole look cycles through color "scenes" (aurora / ember / orchid / viridis).
-  A perspective camera slowly orbits and is pulled in by the bass.
+- **Liquid "flow" field** — an always-moving, domain-warped fluid (ink-in-water /
+  aurora) that flows continuously. Audio shapes it *gently and slowly* (flow pace,
+  swell, shimmer) rather than punching on the beat. Beats arrive as soft expanding
+  **ripples** across the surface — wavy, not flashy.
+- **Mood drift** — the color palette crossfades over time based on the song's
+  spectral character (energy + brightness), so the look evolves as the music
+  changes. Built for leaving on a second screen as ambient visual art.
+- **Ambient mode** — the UI auto-hides after a few seconds idle; double-click for
+  fullscreen.
 - **Audio sources:** system/tab audio (screen-share), microphone, file
   (drag-drop or picker), and a synthetic demo.
-- Web Audio FFT → smoothed bass / mid / treble bands.
-- Beat + big-beat detection via low-band spectral-flux onset detection.
-- ACES tone mapping + bloom (`UnrealBloomPass` + `OutputPass`).
+- Web Audio FFT → smoothed bass / mid / treble + slow energy/tilt signals.
+- Beat / big-beat detection (spectral-flux onset) — used only for gentle ripples.
+- ACES tone mapping + soft bloom (`UnrealBloomPass` + `OutputPass`).
 - One-click canvas recording to `.webm` (`MediaRecorder`, timesliced).
 
 Validated end-to-end (isolated headless Chromium) with real playing audio: clean
-init, live FFT data, reactive bands, beats + big beats firing in time.
+init, live FFT data, reactive flow, color drifting across moods.
 
 ## Getting started
 
@@ -42,7 +46,8 @@ npm run dev      # http://localhost:5173
 - Or drop an audio file onto the page, use **🎤 Mic**, or hit **✨ Demo** to see it
   run on synthetic audio immediately.
 - Press **● Rec** to capture the canvas to a `.webm`.
+- **Leave it running:** move the mouse away and the UI fades; double-click for fullscreen.
 
 ## Next up (see [PLAN.md](./PLAN.md))
 
-Native 9:16 export, more scene types, and a shareable deploy.
+Native 9:16 export, more flow styles, and a shareable deploy.

@@ -1,46 +1,21 @@
 import { Color } from "three";
 
-/** A distinct visual "look" the visualizer cycles through. */
-export interface ScenePalette {
+/**
+ * A "mood" = a 3-stop gradient for the liquid field (deep shadow -> body ->
+ * bright filament). The visualizer crossfades continuously between these based
+ * on the song's spectral tilt + energy, so the color drifts as the music
+ * changes instead of switching on the beat.
+ */
+export interface Mood {
   name: string;
-  bg: Color; // background / fog
-  pA: Color; // particle color near center
-  pB: Color; // particle color far out
-  star: Color; // starfield tint
-  struct: Color; // structure (core + shards) color
+  c1: Color; // deep shadow / background
+  c2: Color; // main body
+  c3: Color; // bright filament / highlight
 }
 
-export const SCENES: ScenePalette[] = [
-  {
-    name: "aurora",
-    bg: new Color(0x02030a),
-    pA: new Color(0x16407a),
-    pB: new Color(0x7be8ff),
-    star: new Color(0xbfe3ff),
-    struct: new Color(0x8a5cff),
-  },
-  {
-    name: "ember",
-    bg: new Color(0x0a0402),
-    pA: new Color(0x7a2a16),
-    pB: new Color(0xffd07b),
-    star: new Color(0xffcaa0),
-    struct: new Color(0xff5c8a),
-  },
-  {
-    name: "orchid",
-    bg: new Color(0x07020e),
-    pA: new Color(0x5a167a),
-    pB: new Color(0xff8ae8),
-    star: new Color(0xe9b8ff),
-    struct: new Color(0x6c7bff),
-  },
-  {
-    name: "viridis",
-    bg: new Color(0x02080a),
-    pA: new Color(0x167a55),
-    pB: new Color(0x9bffcf),
-    star: new Color(0xb8ffe6),
-    struct: new Color(0x5cffb0),
-  },
+export const MOODS: Mood[] = [
+  { name: "abyss", c1: new Color(0x040814), c2: new Color(0x123a6b), c3: new Color(0x6fe0ff) },
+  { name: "tide", c1: new Color(0x04140f), c2: new Color(0x10674a), c3: new Color(0x8effc8) },
+  { name: "ink", c1: new Color(0x0a0414), c2: new Color(0x46197a), c3: new Color(0xff9cf0) },
+  { name: "ember", c1: new Color(0x140703), c2: new Color(0x7a2f12), c3: new Color(0xffd58a) },
 ];

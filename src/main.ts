@@ -97,6 +97,21 @@ window.addEventListener("drop", (e) => {
   if (f && f.type.startsWith("audio")) void onFile(f);
 });
 
+// Auto-hide the UI when idle (ambient background mode); double-click = fullscreen.
+let idleTimer: number | undefined;
+function poke() {
+  document.body.classList.remove("idle");
+  clearTimeout(idleTimer);
+  idleTimer = window.setTimeout(() => document.body.classList.add("idle"), 3000);
+}
+window.addEventListener("mousemove", poke);
+window.addEventListener("keydown", poke);
+poke();
+canvas.addEventListener("dblclick", () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+  else document.exitFullscreen();
+});
+
 // Debug hook for automated validation (read live audio state from the console).
 const liveBands = { bass: 0, mid: 0, treble: 0, beat: 0 };
 (window as Window & { __capclu?: unknown }).__capclu = {
