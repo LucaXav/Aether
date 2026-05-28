@@ -71,15 +71,33 @@ function setupLoopbackAudio() {
 
 // Reparent our window behind the desktop icons (Windows WorkerW technique) via
 // a PowerShell helper. Fully reversible: closing the app restores the desktop.
-function attachAsWallpaper() {
+function attachAsWallpaper(win) {
   if (process.platform !== "win32") {
     console.error("CAPCLU_WALLPAPER_UNSUPPORTED (Windows only)");
     return;
   }
+  // Pass the real window handle (robust) instead of matching by title.
+  let hwnd = "";
+  try {
+    const buf = win.getNativeWindowHandle();
+    hwnd = buf.length >= 8 ? buf.readBigUInt64LE(0).toString() : String(buf.readUInt32LE(0));
+  } catch (e) {
+    console.error("WP-ERR: handle", e && e.message);
+  }
   const ps = path.join(__dirname, "attach-wallpaper.ps1");
   const child = spawn(
     "powershell.exe",
-    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps, "-Title", WP_TITLE],
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      ps,
+      "-Hwnd",
+      hwnd,
+      "-Title",
+      WP_TITLE,
+    ],
     { windowsHide: true }
   );
   child.stdout.on("data", (d) => console.log("WP:", String(d).trim()));
@@ -134,7 +152,7 @@ async function createWindow() {
     }
     if (WALLPAPER) {
       win.setTitle(WP_TITLE);
-      setTimeout(attachAsWallpaper, 600);
+      setTimeout(() => attachAsWallpaper(win), 600);
     }
   });
   win.webContents.on("did-fail-load", (_e, code, desc) => {
