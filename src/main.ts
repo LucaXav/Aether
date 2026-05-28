@@ -1,25 +1,18 @@
 import "./style.css";
 import { AudioEngine, type AudioMode } from "./audio";
 import { Visualizer } from "./visualizer";
-import { Recorder } from "./recorder";
 
 const canvas = document.getElementById("view") as HTMLCanvasElement;
 const audio = new AudioEngine();
 const viz = new Visualizer(canvas);
-const recorder = new Recorder(canvas);
 
 const byId = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 
 const btnSystem = byId<HTMLButtonElement>("btn-system");
-const btnLoad = byId<HTMLButtonElement>("btn-load");
-const btnPlay = byId<HTMLButtonElement>("btn-play");
 const btnMic = byId<HTMLButtonElement>("btn-mic");
-const btnDemo = byId<HTMLButtonElement>("btn-demo");
 const btnStyle = byId<HTMLButtonElement>("btn-style");
-const btnRec = byId<HTMLButtonElement>("btn-rec");
 const btnFull = byId<HTMLButtonElement>("btn-full");
-const fileInput = byId<HTMLInputElement>("file");
 const dropHint = byId<HTMLDivElement>("drop-hint");
 const brandStyle = document.querySelector(".brand span") as HTMLSpanElement | null;
 
@@ -29,28 +22,10 @@ const barTreble = byId<HTMLSpanElement>("bar-treble");
 const beatEl = byId<HTMLDivElement>("beat");
 
 function reflectMode(mode: AudioMode) {
-  btnDemo.classList.toggle("active", mode === "demo");
   btnMic.classList.toggle("active", mode === "mic");
   btnSystem.classList.toggle("active", mode === "system");
-  btnPlay.disabled = mode !== "file";
 }
 
-async function onFile(file: File) {
-  await audio.loadFile(file);
-  reflectMode("file");
-  btnPlay.textContent = "⏸";
-  dropHint.classList.add("hidden");
-}
-
-btnLoad.onclick = () => fileInput.click();
-fileInput.onchange = () => {
-  const f = fileInput.files?.[0];
-  if (f) void onFile(f);
-};
-btnPlay.onclick = () => {
-  audio.playPause();
-  btnPlay.textContent = audio.isPlaying ? "⏸" : "▶";
-};
 btnMic.onclick = async () => {
   try {
     await audio.useMic();
@@ -74,37 +49,11 @@ btnSystem.onclick = async () => {
     );
   }
 };
-btnDemo.onclick = () => {
-  audio.setDemo();
-  reflectMode("demo");
-  btnPlay.textContent = "▶";
-};
-btnRec.onclick = () => {
-  recorder.toggle();
-  btnRec.classList.toggle("recording", recorder.recording);
-  btnRec.textContent = recorder.recording ? "■ Stop" : "● Rec";
-};
-
 function reflectStyle(name: string) {
   btnStyle.textContent = "◆ " + name;
   if (brandStyle) brandStyle.textContent = "· " + name;
 }
 btnStyle.onclick = () => reflectStyle(viz.cycleStyle());
-
-// drag & drop anywhere on the window
-window.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  document.body.classList.add("dragging");
-});
-window.addEventListener("dragleave", (e) => {
-  if (e.relatedTarget === null) document.body.classList.remove("dragging");
-});
-window.addEventListener("drop", (e) => {
-  e.preventDefault();
-  document.body.classList.remove("dragging");
-  const f = e.dataTransfer?.files?.[0];
-  if (f && f.type.startsWith("audio")) void onFile(f);
-});
 
 // Auto-hide the UI when idle (ambient background mode); double-click = fullscreen.
 let idleTimer: number | undefined;
@@ -115,6 +64,15 @@ function poke() {
 }
 window.addEventListener("mousemove", poke);
 window.addEventListener("keydown", poke);
+// keyboard: S cycles styles; number keys jump straight to one
+window.addEventListener("keydown", (e) => {
+  if (e.key === "s" || e.key === "S") {
+    reflectStyle(viz.cycleStyle());
+  } else if (e.key >= "1" && e.key <= "9") {
+    const n = parseInt(e.key, 10) - 1;
+    if (n < viz.styleCount) reflectStyle(viz.setStyle(n));
+  }
+});
 poke();
 function toggleFullscreen() {
   if (!document.fullscreenElement) document.documentElement.requestFullscreen();
@@ -128,19 +86,24 @@ canvas.addEventListener("dblclick", toggleFullscreen);
 const env = (
   window as Window & { capcluEnv?: { electron?: boolean; wallpaper?: boolean } }
 ).capcluEnv;
-if (env?.wallpaper) {
-  document.body.classList.add("idle");
-  dropHint.classList.add("hidden");
+if (env?.electron) {
+  // auto-connect to the device's audio (loopback) so it reacts with no setup
   audio
     .useSystemAudio()
-    .then(() => reflectMode("system"))
-    .catch(() => {});
-} else if (env?.electron) {
-  // chromeless desktop window: tell the user how to move / fullscreen / quit
-  dropHint.innerHTML =
-    "<strong>capclu</strong>Drag anywhere to move this onto a monitor.<br />" +
-    "<b>⛶ Fullscreen</b> (or double-click) fills that screen · <b>Ctrl+Shift+Q</b> quits.<br />" +
-    "Hit <b>🖥 System audio</b> to react to whatever's playing.";
+    .then(() => {
+      console.log("AETHER_AUDIO ok");
+      reflectMode("system");
+    })
+    .catch((e) => console.log("AETHER_AUDIO fail", (e as Error)?.message));
+  if (env.wallpaper) {
+    document.body.classList.add("idle");
+    dropHint.classList.add("hidden");
+  } else {
+    dropHint.innerHTML =
+      "<strong>Aether</strong>Drag anywhere to move this onto a monitor.<br />" +
+      "<b>⛶ Fullscreen</b> (or double-click) fills the screen · <b>Ctrl+Shift+Q</b> quits.<br />" +
+      "Listening to your device audio · <b>🎤 Mic</b> to switch.";
+  }
 }
 
 // Debug hook for automated validation (read live audio state from the console).
