@@ -31,8 +31,6 @@ const MIME = {
   ".ico": "image/x-icon",
 };
 
-// Serve the built app over localhost (a secure context, so getDisplayMedia /
-// getUserMedia work) instead of file:// (which blocks those APIs).
 function startServer() {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
@@ -58,8 +56,6 @@ function startServer() {
   });
 }
 
-// Feed system (loopback) audio to getDisplayMedia with no picker, so it reacts
-// to whatever is playing on the device.
 function setupLoopbackAudio() {
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
     desktopCapturer
@@ -69,14 +65,11 @@ function setupLoopbackAudio() {
   });
 }
 
-// Reparent our window behind the desktop icons (Windows WorkerW technique) via
-// a PowerShell helper. Fully reversible: closing the app restores the desktop.
 function attachAsWallpaper(win) {
   if (process.platform !== "win32") {
     console.error("CAPCLU_WALLPAPER_UNSUPPORTED (Windows only)");
     return;
   }
-  // Pass the real window handle (robust) instead of matching by title.
   let hwnd = "";
   try {
     const buf = win.getNativeWindowHandle();
@@ -87,17 +80,7 @@ function attachAsWallpaper(win) {
   const ps = path.join(__dirname, "attach-wallpaper.ps1");
   const child = spawn(
     "powershell.exe",
-    [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      ps,
-      "-Hwnd",
-      hwnd,
-      "-Title",
-      WP_TITLE,
-    ],
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps, "-Hwnd", hwnd, "-Title", WP_TITLE],
     { windowsHide: true }
   );
   child.stdout.on("data", (d) => console.log("WP:", String(d).trim()));
@@ -114,15 +97,15 @@ async function createWindow() {
     show: !SMOKE,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
-      backgroundThrottling: false, // keep animating when unfocused / behind icons
+      backgroundThrottling: false,
     },
   };
 
   if (WALLPAPER) {
     const b = screen.getPrimaryDisplay().bounds;
     Object.assign(opts, {
-      x: 0,
-      y: 0,
+      x: b.x,
+      y: b.y,
       width: b.width,
       height: b.height,
       frame: false,
@@ -134,15 +117,27 @@ async function createWindow() {
       title: WP_TITLE,
     });
   } else {
-    Object.assign(opts, { width: 1280, height: 720 });
+    // windowed: a normal, movable, resizable window (drag it to any monitor;
+    // double-click to fullscreen on that monitor)
+    Object.assign(opts, {
+      width: 1280,
+      height: 800,
+      minWidth: 480,
+      minHeight: 320,
+      title: "capclu",
+    });
   }
 
   const win = new BrowserWindow(opts);
 
-  if (WALLPAPER) {
-    // keep a stable window title for the PowerShell helper to find
-    win.on("page-title-updated", (e) => e.preventDefault());
-  }
+  if (WALLPAPER) win.on("page-title-updated", (e) => e.preventDefault());
+
+  // --- crash / exit diagnostics ---
+  win.webContents.on("render-process-gone", (_e, d) =>
+    console.error("RENDER_GONE", JSON.stringify(d))
+  );
+  win.webContents.on("unresponsive", () => console.error("WINDOW_UNRESPONSIVE"));
+  win.on("closed", () => console.log("WINDOW_CLOSED"));
 
   win.webContents.on("did-finish-load", () => {
     console.log("CAPCLU_LOADED");
@@ -163,13 +158,23 @@ async function createWindow() {
   await win.loadURL(`http://127.0.0.1:${port}/${WALLPAPER ? "?wallpaper=1" : ""}`);
 
   if (WALLPAPER && !SMOKE) {
-    // frameless + behind icons has no close button — always allow a clean exit
     globalShortcut.register("CommandOrControl+Shift+Q", () => app.quit());
   }
 }
 
-app.whenReady().then(createWindow);
-app.on("will-quit", () => globalShortcut.unregisterAll());
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+// single instance: a second launch just focuses/no-ops instead of stacking
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  // don't let Electron give up (and tear down) after repeated GPU hiccups
+  app.commandLine.appendSwitch("disable-gpu-process-crash-limit");
+
+  app.on("child-process-gone", (_e, d) =>
+    console.error("CHILD_GONE", JSON.stringify(d))
+  );
+  app.whenReady().then(createWindow);
+  app.on("will-quit", () => globalShortcut.unregisterAll());
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+}

@@ -18,6 +18,10 @@ public class Wp {
   public static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
   [DllImport("user32.dll")]
   public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+  [DllImport("user32.dll")]
+  public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")]
+  public static extern int GetSystemMetrics(int nIndex);
   public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
   [DllImport("user32.dll")]
   public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
@@ -56,8 +60,11 @@ if ($worker -eq [IntPtr]::Zero) { $worker = $progman }
 
 [void][Wp]::SetParent($target, $worker)
 
-Add-Type -AssemblyName System.Windows.Forms
-$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-[void][Wp]::MoveWindow($target, 0, 0, $b.Width, $b.Height, $true)
+# Size to the PHYSICAL primary-monitor resolution so it fills the screen on
+# high-DPI displays (SetProcessDPIAware makes GetSystemMetrics report real px).
+[void][Wp]::SetProcessDPIAware()
+$w = [Wp]::GetSystemMetrics(0) # SM_CXSCREEN
+$h = [Wp]::GetSystemMetrics(1) # SM_CYSCREEN
+[void][Wp]::MoveWindow($target, 0, 0, $w, $h, $true)
 
-Write-Output "attached target=$target worker=$worker"
+Write-Output "attached target=$target worker=$worker size=${w}x${h}"
