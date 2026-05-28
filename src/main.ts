@@ -1,5 +1,5 @@
 import "./style.css";
-import { AudioEngine } from "./audio";
+import { AudioEngine, type AudioMode } from "./audio";
 import { Visualizer } from "./visualizer";
 import { Recorder } from "./recorder";
 
@@ -11,6 +11,7 @@ const recorder = new Recorder(canvas);
 const byId = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 
+const btnSystem = byId<HTMLButtonElement>("btn-system");
 const btnLoad = byId<HTMLButtonElement>("btn-load");
 const btnPlay = byId<HTMLButtonElement>("btn-play");
 const btnMic = byId<HTMLButtonElement>("btn-mic");
@@ -24,9 +25,10 @@ const barMid = byId<HTMLSpanElement>("bar-mid");
 const barTreble = byId<HTMLSpanElement>("bar-treble");
 const beatEl = byId<HTMLDivElement>("beat");
 
-function reflectMode(mode: "demo" | "file" | "mic") {
+function reflectMode(mode: AudioMode) {
   btnDemo.classList.toggle("active", mode === "demo");
   btnMic.classList.toggle("active", mode === "mic");
+  btnSystem.classList.toggle("active", mode === "system");
   btnPlay.disabled = mode !== "file";
 }
 
@@ -53,6 +55,20 @@ btnMic.onclick = async () => {
     dropHint.classList.add("hidden");
   } catch {
     alert("Could not access the microphone.");
+  }
+};
+btnSystem.onclick = async () => {
+  try {
+    await audio.useSystemAudio();
+    reflectMode("system");
+    dropHint.classList.add("hidden");
+  } catch (e) {
+    const why = (e as Error)?.message === "no_audio_track";
+    alert(
+      why
+        ? 'No audio was shared. In the prompt, pick a screen or tab and turn ON "Share audio / share tab audio".'
+        : "System audio capture was cancelled or is unavailable in this browser."
+    );
   }
 };
 btnDemo.onclick = () => {
@@ -94,7 +110,7 @@ const start = performance.now();
 function loop() {
   const time = (performance.now() - start) / 1000;
   const d = audio.update(time);
-  viz.render(time, d);
+  viz.render(d);
   Object.assign(liveBands, d);
 
   barBass.style.setProperty("--v", d.bass.toFixed(3));

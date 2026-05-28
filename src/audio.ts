@@ -1,10 +1,11 @@
-export type AudioMode = "demo" | "file" | "mic";
+export type AudioMode = "demo" | "file" | "mic" | "system";
 
 export interface AudioData {
   bass: number; // 0..1
   mid: number; // 0..1
   treble: number; // 0..1
   beat: number; // 0..1, spikes on a detected kick then decays
+  bigBeat: number; // 0..1, fires on strong/periodic beats -> structural events
 }
 
 /**
@@ -17,7 +18,7 @@ export class AudioEngine {
 
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
-  private freq: Uint8Array = new Uint8Array(0);
+  private freq = new Uint8Array(0);
 
   private audioEl: HTMLAudioElement | null = null;
   private elSource: MediaElementAudioSourceNode | null = null;
@@ -33,6 +34,8 @@ export class AudioEngine {
   private fluxAvg = 0;
   private lastFlux = 0;
   private beatCooldown = 0;
+  private beatCounter = 0;
+  private bigBeatVal = 0;
 
   get isPlaying(): boolean {
     return !!this.audioEl && !this.audioEl.paused;
@@ -47,7 +50,7 @@ export class AudioEngine {
     this.analyser.fftSize = 1024;
     this.analyser.smoothingTimeConstant = 0.55; // snappier so attacks survive
     this.analyser.minDecibels = -90;
-    this.analyser.maxDecibels = -20; // more headroom -> louds don't peg to 255
+    this.analyser.maxDecibels = -25;
     this.freq = new Uint8Array(this.analyser.frequencyBinCount); // 512
   }
 
@@ -92,6 +95,30 @@ export class AudioEngine {
     this.mode = "mic";
   }
 
+  /**
+   * Capture whatever is playing on the device via the screen-share API.
+   * The user picks a screen/tab and must enable "share audio". We keep only
+   * the audio track (the video track is stopped immediately).
+   */
+  async useSystemAudio() {
+    this.ensureCtx();
+    await this.ctx!.resume();
+    const md = navigator.mediaDevices as MediaDevices & {
+      getDisplayMedia: (c: MediaStreamConstraints) => Promise<MediaStream>;
+    };
+    const stream = await md.getDisplayMedia({ video: true, audio: true });
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      stream.getTracks().forEach((t) => t.stop());
+      throw new Error("no_audio_track");
+    }
+    stream.getVideoTracks().forEach((t) => t.stop()); // we only need the audio
+    const src = this.ctx!.createMediaStreamSource(stream);
+    this.route(src, false); // already audible on the device; don't echo
+    this.audioEl?.pause();
+    this.mode = "system";
+  }
+
   playPause() {
     if (!this.audioEl) return;
     if (this.audioEl.paused) this.audioEl.play();
@@ -118,10 +145,10 @@ export class AudioEngine {
     }
 
     this.analyser.getByteFrequencyData(this.freq);
-    const bins = this.freq.length; // 512 -> ~43 Hz per bin at 44.1 kHz
-    const bass = avgRange(this.freq, 0, 8) / 255; // ~0-350 Hz
-    const mid = avgRange(this.freq, 8, 80) / 255; // ~350 Hz - 3.5 kHz
-    const treble = avgRange(this.freq, 80, bins) / 255; // ~3.5 kHz +
+    const bass = avgRange(this.freq, 0, 7) / 255; // ~0-300 Hz
+    const mid = avgRange(this.freq, 7, 56) / 255; // ~300 Hz - 2.4 kHz
+    // treble focuses on the lively part of the high end and gets a small boost
+    const treble = Math.min(1, (avgRange(this.freq, 56, 220) / 255) * 1.4);
 
     const k = 0.3;
     this.sBass += (bass - this.sBass) * k;
@@ -137,11 +164,23 @@ export class AudioEngine {
     this.lastFlux = flux;
     this.fluxAvg += (flux - this.fluxAvg) * 0.1;
     if (this.beatCooldown > 0) this.beatCooldown--;
+    let fired = false;
     if (this.beatCooldown === 0 && flux > 0.04 && flux > this.fluxAvg * 1.6) {
       this.beatVal = 1.0;
       this.beatCooldown = 7; // debounce ~120ms @60fps
+      fired = true;
     } else {
       this.beatVal *= 0.86;
+    }
+
+    // bigBeat: a strong onset, or every 4th beat -> drives structural events
+    if (fired) {
+      this.beatCounter++;
+      if (flux > this.fluxAvg * 3 || this.beatCounter % 4 === 0) {
+        this.bigBeatVal = 1.0;
+      }
+    } else {
+      this.bigBeatVal *= 0.92;
     }
 
     return {
@@ -149,6 +188,7 @@ export class AudioEngine {
       mid: this.sMid,
       treble: this.sTreble,
       beat: this.beatVal,
+      bigBeat: this.bigBeatVal,
     };
   }
 
@@ -177,11 +217,15 @@ export class AudioEngine {
     // ~2 synthetic beats per second
     const phase = (time * 2.0) % 1.0;
     const beat = Math.max(0, 1.0 - phase * 4.0);
+    // a big beat every ~2.7s
+    const bigPhase = (time / 2.7) % 1.0;
+    const bigBeat = Math.max(0, 1.0 - bigPhase * 10.0);
     return {
       bass: clamp01(bass),
       mid: clamp01(mid),
       treble: clamp01(treble),
       beat,
+      bigBeat,
     };
   }
 }

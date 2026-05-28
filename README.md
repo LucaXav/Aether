@@ -15,15 +15,20 @@ nebula shader react to bass/mid/treble with beat-driven pulses, and record the
 canvas to a `.webm`.
 
 What's wired up:
-- Fullscreen GLSL nebula shader (domain-warped fbm + IQ cosine palette)
-- Web Audio FFT → smoothed bass / mid / treble bands
-- Beat detection via low-band spectral-flux onset detection
-- ACES tone mapping + bloom (`UnrealBloomPass` + `OutputPass`)
-- Audio sources: file (drag-drop or picker), microphone, synthetic demo
-- One-click canvas recording to `.webm` (`MediaRecorder`, timesliced)
+- **3D "hybrid scene"** (not a flat pulsing shader): a deep starfield, ~4k GPU
+  particles streaming along a 3D curl flow-field, and a wireframe core + orbiting
+  shards. Beats burst the particles outward; **big beats** explode the shards and
+  the whole look cycles through color "scenes" (aurora / ember / orchid / viridis).
+  A perspective camera slowly orbits and is pulled in by the bass.
+- **Audio sources:** system/tab audio (screen-share), microphone, file
+  (drag-drop or picker), and a synthetic demo.
+- Web Audio FFT → smoothed bass / mid / treble bands.
+- Beat + big-beat detection via low-band spectral-flux onset detection.
+- ACES tone mapping + bloom (`UnrealBloomPass` + `OutputPass`).
+- One-click canvas recording to `.webm` (`MediaRecorder`, timesliced).
 
-Validated end-to-end with real playing audio: confirmed live FFT data, reactive
-bands, beats firing in time, and a non-empty recorded clip.
+Validated end-to-end (isolated headless Chromium) with real playing audio: clean
+init, live FFT data, reactive bands, beats + big beats firing in time.
 
 ## Getting started
 
@@ -32,9 +37,12 @@ npm install
 npm run dev      # http://localhost:5173
 ```
 
-Then drop an audio file onto the page (or hit **Demo** to see it run on synthetic
-audio immediately), and press **● Rec** to capture a clip.
+- **React to music playing on your device:** click **🖥 System audio**, then in the
+  prompt pick a screen or tab and turn ON "Share audio". (No mic needed.)
+- Or drop an audio file onto the page, use **🎤 Mic**, or hit **✨ Demo** to see it
+  run on synthetic audio immediately.
+- Press **● Rec** to capture the canvas to a `.webm`.
 
 ## Next up (see [PLAN.md](./PLAN.md))
 
-Preset system, native 9:16 export, and a shareable deploy.
+Native 9:16 export, more scene types, and a shareable deploy.
