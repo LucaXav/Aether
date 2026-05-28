@@ -34,7 +34,17 @@ What's wired up:
 Validated end-to-end (isolated headless Chromium) with real playing audio: clean
 init, live FFT data, reactive flow, color drifting across moods.
 
-## Getting started
+## Download (Windows)
+
+Grab the latest **`Aether-Setup-x.y.z.exe`** from the
+[Releases page](https://github.com/LucaXav/capclu/releases) and run it.
+
+> The installer isn't code-signed, so Windows SmartScreen will warn the first
+> time: click **More info → Run anyway**. (Code signing requires a paid
+> certificate.) A `portable` `.exe` that runs without installing is also attached
+> to each release.
+
+## Getting started (from source)
 
 ```bash
 npm install
@@ -73,6 +83,24 @@ quit** (the window is frameless and behind the icons, so there's no close button
 > icons, `Ctrl+Shift+Q` still quits it. Alternatives: a paid tool like
 > **Wallpaper Engine** can load the built `dist/` as a web wallpaper, or install
 > the Rust toolchain to use the `electron-as-wallpaper` native module.
+
+## Publishing a release
+
+Packaging uses [electron-builder](https://www.electron.build/). A GitHub Actions
+workflow (`.github/workflows/release.yml`) builds the Windows installer and
+attaches it to a GitHub Release automatically when you push a version tag:
+
+```bash
+# bump the version in package.json first (e.g. 0.1.0 -> 0.1.1), then:
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+To build an installer locally instead:
+
+```bash
+npm run dist:win   # outputs release/Aether-Setup-<version>.exe (+ portable)
+```
 
 ## Next up (see [PLAN.md](./PLAN.md))
 

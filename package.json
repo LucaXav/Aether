@@ -3,13 +3,18 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "electron/main.cjs",
+  "repository": "https://github.com/LucaXav/capclu",
+  "author": "LucaXav",
   "description": "Audio-reactive shader visualizer",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "app": "vite build && electron electron/main.cjs",
-    "wallpaper": "vite build && electron electron/main.cjs --wallpaper"
+    "wallpaper": "vite build && electron electron/main.cjs --wallpaper",
+    "dist": "vite build && electron-builder",
+    "dist:win": "vite build && electron-builder --win"
   },
   "dependencies": {
     "three": "^0.184.0"
@@ -17,7 +22,36 @@
   "devDependencies": {
     "@types/three": "^0.184.1",
     "electron": "^42.3.0",
+    "electron-builder": "^26.8.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.14"
+  },
+  "build": {
+    "appId": "com.lucaxav.aether",
+    "productName": "Aether",
+    "directories": {
+      "output": "release"
+    },
+    "asar": false,
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Aether-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Aether-${version}-portable.${ext}"
+    }
   }
 }
