@@ -112,6 +112,20 @@ canvas.addEventListener("dblclick", () => {
   else document.exitFullscreen();
 });
 
+// In Electron wallpaper mode: hide the UI and auto-capture system (loopback)
+// audio so it reacts to whatever's playing with no interaction.
+const env = (
+  window as Window & { capcluEnv?: { electron?: boolean; wallpaper?: boolean } }
+).capcluEnv;
+if (env?.wallpaper) {
+  document.body.classList.add("idle");
+  dropHint.classList.add("hidden");
+  audio
+    .useSystemAudio()
+    .then(() => reflectMode("system"))
+    .catch(() => {});
+}
+
 // Debug hook for automated validation (read live audio state from the console).
 const liveBands = { bass: 0, mid: 0, treble: 0, beat: 0 };
 (window as Window & { __capclu?: unknown }).__capclu = {

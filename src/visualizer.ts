@@ -32,6 +32,15 @@ export class Visualizer {
   private beatLatch = false;
   private bigLatch = false;
 
+  // beat-driven color + motion (eased, so nothing snaps)
+  private hueShift = 0; // current hue rotation (rad)
+  private hueTarget = 0; // beats walk this around; eased toward smoothly
+  private swirl = 0; // continuous field rotation
+  private swirlRate = 0.03; // rad/s, beats vary it
+  private flowDir = new THREE.Vector2(); // gliding drift, beats push it
+  private shape = 0.5; // morph 0..1
+  private shapePhase = 0;
+
   // mood crossfade
   private moodPos = 0;
   private moodDrift = 0;
@@ -74,6 +83,10 @@ export class Visualizer {
         uC1: { value: this.c1 },
         uC2: { value: this.c2 },
         uC3: { value: this.c3 },
+        uHueShift: { value: 0 },
+        uSwirl: { value: 0 },
+        uFlowDir: { value: this.flowDir },
+        uShape: { value: 0.5 },
         uRipplePos: { value: this.ripplePos },
         uRippleAge: { value: this.rippleAge },
         uRippleAmp: { value: this.rippleAmp },
@@ -85,8 +98,8 @@ export class Visualizer {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    // soft, low bloom — just a glow, not a flash
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.35, 0.7, 0.5);
+    // soft bloom — a warm glow on the bright filaments, not a flash
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.8, 0.55);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
 
@@ -131,22 +144,52 @@ export class Visualizer {
     u.uTreble.value = this.sTreble;
     u.uEnergy.value = this.sEnergy;
 
-    // --- ripples: beats spread as gentle waves; big beats are larger/slower ---
+    // --- beats: instead of a brightness pulse, each beat recolors (hue walk),
+    //     glides the flow in a new direction, and nudges the shape morph ---
     for (let i = 0; i < RIPPLES; i++) this.rippleAge[i] += dt;
     if (a.beat > 0.6 && !this.beatLatch) {
       this.beatLatch = true;
+      // small random hue step -> color keeps changing over the song
+      this.hueTarget += (Math.random() - 0.5) * 0.9;
+      // gentle directional glide (smooth, decays over ~1s) -> different movement
       const ang = Math.random() * Math.PI * 2;
+      this.flowDir.x += Math.cos(ang) * 0.12;
+      this.flowDir.y += Math.sin(ang) * 0.12;
+      // vary the rotation speed and direction a touch
+      this.swirlRate += (Math.random() - 0.5) * 0.05;
+      // a soft traveling ripple for texture
       const rad = 0.6 + Math.random() * 1.4;
-      this.spawnRipple(Math.cos(ang) * rad, Math.sin(ang) * rad, 0.18 + a.beat * 0.12);
+      this.spawnRipple(Math.cos(ang) * rad, Math.sin(ang) * rad, 0.12 + a.beat * 0.08);
     } else if (a.beat < 0.3) {
       this.beatLatch = false;
     }
     if (a.bigBeat > 0.6 && !this.bigLatch) {
       this.bigLatch = true;
-      this.spawnRipple(0, 0, 0.4); // large, centered swell
+      this.hueTarget += (Math.random() - 0.5) * 1.4; // bigger color shift
+      this.shapePhase += 1.1; // jump the shape morph -> different shapes
+      this.spawnRipple(0, 0, 0.32); // large, slow centered swell
     } else if (a.bigBeat < 0.3) {
       this.bigLatch = false;
     }
+
+    // ease color + motion so beats glide instead of snapping
+    this.hueTarget += dt * 0.06; // slow continuous drift on top of beat steps
+    this.hueShift += (this.hueTarget - this.hueShift) * 0.05;
+    this.swirlRate += (0.03 - this.swirlRate) * 0.01; // relax back toward baseline
+    this.swirl += this.swirlRate * dt * (1 + this.sEnergy);
+    this.flowDir.multiplyScalar(0.94); // glide decays smoothly
+    this.flowDir.clampLength(0, 1.1);
+    this.shapePhase += dt * (0.05 + this.sMid * 0.06);
+    const shapeTarget = THREE.MathUtils.clamp(
+      0.5 + 0.4 * Math.sin(this.shapePhase) + 0.25 * (this.sMid - 0.3),
+      0,
+      1
+    );
+    this.shape += (shapeTarget - this.shape) * 0.03;
+
+    u.uHueShift.value = this.hueShift;
+    u.uSwirl.value = this.swirl;
+    u.uShape.value = this.shape;
     u.uRippleAge.value = this.rippleAge;
     u.uRippleAmp.value = this.rippleAmp;
 

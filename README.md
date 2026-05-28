@@ -48,6 +48,32 @@ npm run dev      # http://localhost:5173
 - Press **● Rec** to capture the canvas to a `.webm`.
 - **Leave it running:** move the mouse away and the UI fades; double-click for fullscreen.
 
+## Desktop app (Electron)
+
+```bash
+npm run app        # builds, then opens the visualizer as a desktop window
+```
+
+Inside Electron, **🖥 System audio** captures the device's audio via **loopback**
+(no screen-share prompt) — it just reacts to whatever's playing.
+
+## Live wallpaper (Windows)
+
+```bash
+npm run wallpaper  # runs it as a desktop wallpaper, behind your icons
+```
+
+This reparents the window behind the desktop icons (the Windows "WorkerW"
+technique) and auto-captures system audio, so your desktop background becomes a
+live, music-reacting visual. It's fully reversible — **press `Ctrl+Shift+Q` to
+quit** (the window is frameless and behind the icons, so there's no close button).
+
+> Note: the wallpaper attach is Windows-specific and varies slightly across
+> builds; if it ever shows as a normal fullscreen window instead of behind the
+> icons, `Ctrl+Shift+Q` still quits it. Alternatives: a paid tool like
+> **Wallpaper Engine** can load the built `dist/` as a web wallpaper, or install
+> the Rust toolchain to use the `electron-as-wallpaper` native module.
+
 ## Next up (see [PLAN.md](./PLAN.md))
 
 Native 9:16 export, more flow styles, and a shareable deploy.
