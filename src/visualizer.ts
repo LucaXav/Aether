@@ -88,8 +88,26 @@ export class Visualizer {
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
 
+    const onResize = () => this.resize();
     this.resize();
-    window.addEventListener("resize", () => this.resize());
+    // ResizeObserver fires on every actual size change (window drag, fullscreen,
+    // layout) — more reliable than the window 'resize' event alone, especially
+    // in a frameless Electron window.
+    new ResizeObserver(onResize).observe(document.documentElement);
+    window.addEventListener("resize", onResize);
+    // Re-fit when the display's pixel ratio changes (e.g. dragged to a monitor
+    // with different scaling), which doesn't always fire a resize event.
+    const watchDpr = () => {
+      matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener(
+        "change",
+        () => {
+          onResize();
+          watchDpr();
+        },
+        { once: true }
+      );
+    };
+    watchDpr();
   }
 
   get styleName(): string {
