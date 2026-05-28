@@ -68,14 +68,15 @@ audio file / mic
 
 Ship the smallest thing that looks good on camera:
 
-- [ ] Vite + Three.js + TS scaffold, fullscreen shader plane
-- [ ] Load an audio file (drag-drop or file picker) + play/pause
-- [ ] AnalyserNode wired up; bass/mid/treble extracted and smoothed
-- [ ] **One** great shader preset reacting to the bands (start with a "nebula"/plasma — forgiving and gorgeous)
-- [ ] Bloom post-processing (this single effect is 50% of the "wow")
-- [ ] Record button → downloads a .webm
+- [x] Vite + Three.js + TS scaffold, fullscreen shader plane
+- [x] Load an audio file (drag-drop or file picker) + play/pause
+- [x] AnalyserNode wired up; bass/mid/treble extracted and smoothed
+- [x] **One** great shader preset reacting to the bands (nebula: domain-warped fbm + IQ palette)
+- [x] Bloom post-processing (UnrealBloomPass + OutputPass + ACES tone mapping)
+- [x] Record button → downloads a .webm (MediaRecorder, timesliced)
+- [x] Bonus: mic input + synthetic demo mode + beat detection (spectral-flux onset)
 
-That's a weekend. The moment bloom + bass-reactive distortion is on screen, you have a clip.
+✅ **Done & validated** with real playing audio via agent-browser. The moment bloom + bass-reactive distortion is on screen, you have a clip.
 
 ---
 

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>capclu — audio-reactive visualizer</title>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+
+    <div id="drop-hint" class="drop-hint">
+      <strong>capclu</strong>
+      Drop an audio file anywhere — or load one below.<br />
+      Running in <em>demo mode</em> (synthetic audio) until you do.
+    </div>
+
+    <div class="hud">
+      <div class="brand">capclu <span>· nebula</span></div>
+      <div class="meters">
+        <div class="meter"><span class="bar" id="bar-bass"></span><label>BASS</label></div>
+        <div class="meter"><span class="bar" id="bar-mid"></span><label>MID</label></div>
+        <div class="meter"><span class="bar" id="bar-treble"></span><label>TREB</label></div>
+        <div class="beat" id="beat">BEAT</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="btn-load" title="Load an audio file">⤒ Load track</button>
+      <button id="btn-play" disabled title="Play / pause">▶</button>
+      <button id="btn-mic" title="Use microphone input">🎤 Mic</button>
+      <button id="btn-demo" class="active" title="Synthetic demo audio">✨ Demo</button>
+      <button id="btn-rec" class="rec" title="Record the canvas to a .webm clip">● Rec</button>
+      <input type="file" id="file" accept="audio/*" hidden />
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
