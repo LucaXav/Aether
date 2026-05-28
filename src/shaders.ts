@@ -184,8 +184,9 @@ void main(){
     vec3 base = mix(uC1, uC2, 0.35 + 0.65*diff);
     base = mix(base, uC3, fres * 0.55);          // gooey rim glow
     base += uC3 * 0.14 * (0.5 + 0.5*diff);       // soft inner translucency
-    base += spec * mix(uC3, vec3(1.0), 0.6);     // wet shine
-    base += uTreble * 0.10 * spec * uC3;
+    // wet sheen — toned down + mostly tinted (not pure white) so it never blinds
+    base += spec * 0.30 * mix(uC3, vec3(1.0), 0.25);
+    base += uTreble * 0.05 * spec * uC3;
     col = base;
   }
 
