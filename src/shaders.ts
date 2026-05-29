@@ -30,6 +30,7 @@ uniform vec3 uC2;        // body
 uniform vec3 uC3;        // highlight
 uniform float uHueShift; // beat-driven hue rotation (radians)
 uniform float uShape;    // 0..1 in-place shape morph
+uniform float uOverlay;  // 1 = transparent overlay: draw only the subject (no bg)
 
 float hash(vec2 p) {
   p = fract(p * vec2(127.1, 311.7));
@@ -65,11 +66,26 @@ vec3 hueShift(vec3 c, float a) {
   float sa = sin(a);
   return c * ca + cross(k, c) * sa + k * dot(k, c) * (1.0 - ca);
 }
-// aspect-corrected, screen-centered coordinates
+// Aspect-corrected, screen-centered coords with a "contain" fit: the SHORTER
+// screen axis stays the [-0.5,0.5] reference and the LONGER axis is expanded,
+// so the subject keeps its size and is never cropped at any window size/ratio.
 vec2 aspect(vec2 uv) {
   vec2 p = uv - 0.5;
-  p.x *= uRes.x / uRes.y;
+  if (uRes.x > uRes.y) p.x *= uRes.x / uRes.y;
+  else                 p.y *= uRes.y / uRes.x;
   return p;
+}
+// Final pixel write. Normal mode = opaque (the black-background version).
+// Overlay mode = premultiplied alpha keyed on coverage, so only the lit subject
+// shows and the rest is transparent — works for every style.
+void writeColor(vec3 col, float cov) {
+  col = max(col, 0.0);
+  if (uOverlay > 0.5) {
+    cov = clamp(cov, 0.0, 1.0);
+    gl_FragColor = vec4(col * cov, cov);
+  } else {
+    gl_FragColor = vec4(col, 1.0);
+  }
 }
 `;
 
@@ -104,7 +120,9 @@ void main() {
 
   float d = length(aspect(vUv));
   col *= mix(0.45, 1.0, smoothstep(1.7, 0.2, d));
-  gl_FragColor = vec4(max(col, 0.0), 1.0);
+  // overlay coverage: brighter ink = more opaque, dark/edge areas fade to clear
+  float cov = clamp(dot(max(col, 0.0), vec3(0.34)) * 1.6, 0.0, 1.0);
+  writeColor(col, cov);
 }
 `;
 
@@ -158,19 +176,18 @@ void main(){
   float zoom = 1.8;
   vec3 rd = normalize(vec3(p * zoom, -1.7));
 
-  float t = 0.0; float d = 0.0; bool hit = false;
+  float t = 0.0; float d = 0.0; float nearest = 1e9; bool hit = false;
   for(int i=0;i<64;i++){
     vec3 pos = ro + rd*t;
     d = mapSlime(pos);
+    nearest = min(nearest, d);
     if(d < 0.0016){ hit = true; break; }
     t += d * 0.85;
     if(t > 6.0) break;
   }
 
-  // background: deep, soft glow behind the blob
-  float bgv = smoothstep(1.5, 0.0, length(p));
-  vec3 col = mix(uC1 * 0.22, uC1 * 0.65, bgv);
-
+  // shade the slime surface (only meaningful on a hit)
+  vec3 slime = vec3(0.0);
   if(hit){
     vec3 pos = ro + rd*t;
     vec3 n = nrmSlime(pos);
@@ -187,11 +204,21 @@ void main(){
     // wet sheen — toned down + mostly tinted (not pure white) so it never blinds
     base += spec * 0.30 * mix(uC3, vec3(1.0), 0.25);
     base += uTreble * 0.05 * spec * uC3;
-    col = base;
+    slime = base;
   }
 
-  col = hueShift(col, uHueShift);
-  gl_FragColor = vec4(max(col, 0.0), 1.0);
+  if (uOverlay > 0.5) {
+    // transparent overlay: draw ONLY the slime, with a soft anti-aliased edge.
+    // Output is premultiplied alpha so it composites cleanly over anything.
+    float cov = hit ? 1.0 : (1.0 - smoothstep(0.0, 0.02, nearest));
+    vec3 col = max(hueShift(slime, uHueShift), 0.0);
+    gl_FragColor = vec4(col * cov, cov);
+  } else {
+    float bgv = smoothstep(1.5, 0.0, length(p));
+    vec3 col = hit ? slime : mix(uC1 * 0.22, uC1 * 0.65, bgv);
+    col = hueShift(col, uHueShift);
+    gl_FragColor = vec4(max(col, 0.0), 1.0);
+  }
 }
 `;
 
@@ -199,31 +226,48 @@ void main(){
 const BOKEH_MAIN = /* glsl */ `
 void main() {
   vec2 p = aspect(vUv);
-  vec3 col = uC1 * 0.6;
+  vec3 base = uC1 * 0.6;
+  vec3 col = base;
+  float glow = 0.0; // accumulated orb light -> overlay coverage
   // tempo + intensity nudge the orb drift — kept slow so they glide, not jitter
   float spd = 0.03 + uPace * 0.04 + uAggr * 0.06;
 
-  for (int i = 0; i < 16; i++) {
+  // Spread the orbs over a stratified grid (one per cell, jittered inside it) so
+  // they cover the whole screen evenly instead of clumping in a corner. The grid
+  // is sized to the visible box at any window shape.
+  vec2 ext = uRes.x > uRes.y ? vec2(uRes.x / uRes.y, 1.0) : vec2(1.0, uRes.y / uRes.x);
+  vec2 spread = ext * 1.1;
+  const float COLS = 8.0;
+  const float ROWS = 6.0; // 8 x 6 = 48 orbs
+
+  for (int i = 0; i < 48; i++) {
     float fi = float(i);
+    float gx = mod(fi, COLS);
+    float gy = floor(fi / COLS);
     float s1 = hash(vec2(fi, 1.3));
     float s2 = hash(vec2(fi, 7.7));
     float s3 = hash(vec2(fi, 3.1));
-    // anchored spread + a small in-place orbit (the field never slides)
-    vec2 c = vec2(
-      (s1 - 0.5) * 2.2 + 0.22 * sin(uTime * spd * (0.6 + s2) + s1 * 6.2831),
-      (s2 - 0.5) * 1.4 + 0.22 * cos(uTime * spd * (0.5 + s3) + s2 * 6.2831)
+    // cell centre in [-0.5,0.5] + a sub-cell jitter, scaled to the visible box,
+    // then the same gentle in-place orbit as before (movement unchanged).
+    vec2 cell = vec2((gx + 0.5) / COLS, (gy + 0.5) / ROWS) - 0.5;
+    vec2 jitter = (vec2(s1, s2) - 0.5) * vec2(0.85 / COLS, 0.85 / ROWS);
+    vec2 c = (cell + jitter) * spread;
+    c += 0.22 * vec2(
+      sin(uTime * spd * (0.6 + s2) + s1 * 6.2831),
+      cos(uTime * spd * (0.5 + s3) + s2 * 6.2831)
     );
-    float rad = 0.14 + 0.26 * s3;
+    float rad = 0.12 + 0.24 * s3;
     float dd = length(p - c) / rad;
     // tighter falloff -> more defined orbs (less blurry); gentle beat lift
-    float orb = exp(-dd * dd * 7.0) * (0.65 + 0.4 * uEnergy + uAccent * 0.25);
-    col += mix(uC2, uC3, s1) * orb * 0.6;
+    float orb = exp(-dd * dd * 7.0) * (0.6 + 0.4 * uEnergy + uAccent * 0.25);
+    col += mix(uC2, uC3, s1) * orb * 0.5;
+    glow += orb;
   }
 
   col += uTreble * 0.10 * uC3;
   col = hueShift(col, uHueShift);
   col *= mix(0.55, 1.0, smoothstep(1.8, 0.2, length(p)));
-  gl_FragColor = vec4(max(col, 0.0), 1.0);
+  writeColor(col, glow);
 }
 `;
 

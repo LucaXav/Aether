@@ -1,4 +1,4 @@
-# capclu — Audio-Reactive Shader Visualizer
+# Aether — Audio-Reactive Shader Visualizer
 
 A web app: drop in a song (or live mic) → beat-synced WebGL shader visuals → record straight to a 9:16 clip.
 
@@ -37,7 +37,7 @@ init, live FFT data, reactive flow, color drifting across moods.
 ## Download (Windows)
 
 Grab the latest **`Aether-Setup-x.y.z.exe`** from the
-[Releases page](https://github.com/LucaXav/capclu/releases) and run it.
+[Releases page](https://github.com/LucaXav/aether/releases) and run it.
 
 > The installer isn't code-signed, so Windows SmartScreen will warn the first
 > time: click **More info → Run anyway**. (Code signing requires a paid

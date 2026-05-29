@@ -17,6 +17,8 @@ export class Visualizer {
   private clock = new THREE.Clock();
 
   private styleIndex = 0;
+  private overlay = false;
+  private audioMotion = true;
 
   // smoothed audio (decoupled from snappy beat detection for fluid motion)
   private sMid = 0;
@@ -47,6 +49,7 @@ export class Visualizer {
       canvas,
       antialias: true,
       preserveDrawingBuffer: true,
+      alpha: true, // allow a transparent framebuffer for overlay mode
     });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
@@ -75,6 +78,7 @@ export class Visualizer {
         uC3: { value: this.c3 },
         uHueShift: { value: 0 },
         uShape: { value: 0.5 },
+        uOverlay: { value: 0 },
       },
     });
     const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material);
@@ -129,6 +133,29 @@ export class Visualizer {
     return this.setStyle((this.styleIndex + 1) % STYLES.length);
   }
 
+  /**
+   * Transparent overlay mode: draw only the subject on a transparent
+   * background (for floating the slime over other windows). Bypasses bloom
+   * (which doesn't preserve alpha) and clears the framebuffer to alpha 0.
+   */
+  setOverlay(on: boolean) {
+    this.overlay = on;
+    this.material.uniforms.uOverlay.value = on ? 1 : 0;
+    this.material.transparent = on;
+    this.material.blending = on ? THREE.NoBlending : THREE.NormalBlending;
+    this.material.needsUpdate = true;
+    this.renderer.setClearColor(0x000000, on ? 0 : 1);
+  }
+
+  /**
+   * Audio-reactive vs autonomous motion. When off, the audio bands are zeroed
+   * so the slime keeps moving on its own (the uTime-driven wobble/ooze) but
+   * stops reacting to sound — color still drifts slowly on its own.
+   */
+  setAudioMotion(on: boolean) {
+    this.audioMotion = on;
+  }
+
   private resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -146,6 +173,22 @@ export class Visualizer {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const t = this.clock.elapsedTime;
     const u = this.material.uniforms;
+
+    // Autonomous mode: ignore sound but keep the in-place motion alive.
+    if (!this.audioMotion) {
+      a = {
+        ...a,
+        bass: 0,
+        mid: 0,
+        treble: 0,
+        energy: 0,
+        beat: 0,
+        bigBeat: 0,
+        accent: 0,
+        aggression: 0,
+        pace: 0.4,
+      };
+    }
 
     // --- fluid smoothing: ease uniforms slowly toward the audio bands ---
     this.sMid += (a.mid - this.sMid) * 0.06;
@@ -217,6 +260,7 @@ export class Visualizer {
     this.c2.lerpColors(A.c2, B.c2, frac);
     this.c3.lerpColors(A.c3, B.c3, frac);
 
-    this.composer.render();
+    if (this.overlay) this.renderer.render(this.scene, this.camera);
+    else this.composer.render();
   }
 }

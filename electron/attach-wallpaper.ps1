@@ -1,4 +1,4 @@
-param([string]$Hwnd, [string]$Title = "capclu-wallpaper")
+param([string]$Hwnd, [string]$Title = "aether-wallpaper")
 
 # Reparent a window behind the desktop icons using the Windows "WorkerW"
 # technique (same approach live-wallpaper apps use). Fully reversible: closing

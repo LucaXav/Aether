@@ -1,9 +1,27 @@
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 // Expose a small flag so the renderer knows it's running inside Electron and
 // whether it's in wallpaper mode (so it can auto-start system audio + hide UI).
-const wallpaper = new URLSearchParams(location.search).get("wallpaper") === "1";
-contextBridge.exposeInMainWorld("capcluEnv", {
+const params = new URLSearchParams(location.search);
+contextBridge.exposeInMainWorld("aetherEnv", {
   electron: true,
-  wallpaper,
+  wallpaper: params.get("wallpaper") === "1",
+  overlay: params.get("overlay") === "1",
+});
+
+// Overlay controls that need the main process: click-through (input passes to
+// apps behind the overlay) and covering the whole screen.
+contextBridge.exposeInMainWorld("aether", {
+  setClickThrough: (on) => ipcRenderer.send("aether:set-click-through", !!on),
+  onClickThrough: (cb) =>
+    ipcRenderer.on("aether:click-through", (_e, on) => cb(!!on)),
+  setInteractive: (on) => ipcRenderer.send("aether:set-interactive", !!on),
+  onToggleKey: (cb) =>
+    ipcRenderer.on("aether:toggle-key", (_e, k) => cb(k)),
+  toggleMax: () => ipcRenderer.send("aether:toggle-max"),
+  toggleFullscreen: () => ipcRenderer.send("aether:toggle-fullscreen"),
+  dragStart: (p) => ipcRenderer.send("aether:drag-start", p),
+  dragMove: (p) => ipcRenderer.send("aether:drag-move", p),
+  dragEnd: () => ipcRenderer.send("aether:drag-end"),
+  quit: () => ipcRenderer.send("aether:quit"),
 });

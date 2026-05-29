@@ -247,7 +247,7 @@ export class AudioEngine {
     };
   }
 
-  /** Diagnostics for automated validation (exposed on window.__capclu). */
+  /** Diagnostics for automated validation (exposed on window.__aether). */
   debugSnapshot() {
     let freqSum = 0;
     if (this.analyser) {
