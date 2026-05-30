@@ -97,6 +97,11 @@ function attachAsWallpaper(win) {
 // the window must be transparent for it to be useful, which both now are.
 function setupClickThrough(win) {
   let through = false;
+  // Whatever the window's always-on-top state was when we hooked it up — the
+  // overlay starts on, the framed in-app window starts off. We restore this
+  // baseline whenever click-through is turned off so toggling through doesn't
+  // accidentally un-pin the overlay or leave the framed window stuck on top.
+  const baselineOnTop = win.isAlwaysOnTop();
   // Forwarded DOM mouse events are unreliable on Windows once a window is
   // click-through, so while it's on we poll the real cursor position in the main
   // process and push client-relative coords to the renderer. That's what lets it
@@ -126,10 +131,24 @@ function setupClickThrough(win) {
     // forward:true keeps mouse-move events flowing to the page so its own UI can
     // react, while clicks still pass through to the windows underneath.
     win.setIgnoreMouseEvents(through, { forward: true });
+    // The whole point of "▷ through" mode is that the slime keeps painting on
+    // top of whatever you click on. Without forcing always-on-top here, the
+    // clicked app's window comes above the visualizer and the slime "disappears"
+    // — which is exactly what the user reported. "screen-saver" is the highest
+    // practical Windows topmost level. When through goes back off we restore
+    // the baseline so the framed in-app window doesn't stay stuck on top.
+    win.setAlwaysOnTop(through || baselineOnTop, "screen-saver");
     if (through) startCursorPoll();
     else stopCursorPoll();
     if (!win.isDestroyed()) win.webContents.send("aether:click-through", through);
   };
+  // Windows occasionally demotes a topmost window when another window grabs
+  // focus. While through-mode is on, re-assert our top spot every time we lose
+  // focus so the slime stays above whatever the user just clicked into.
+  win.on("blur", () => {
+    if (win.isDestroyed()) return;
+    if (through) win.setAlwaysOnTop(true, "screen-saver");
+  });
   win.on("closed", stopCursorPoll);
   ipcMain.on("aether:set-click-through", (_e, on) => setThrough(on));
   // While click-through, the renderer flips this as the cursor enters/leaves the
