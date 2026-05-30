@@ -12,6 +12,7 @@ interface AetherBridge {
   setClickThrough?: (on: boolean) => void;
   onClickThrough?: (cb: (on: boolean) => void) => void;
   setInteractive?: (on: boolean) => void;
+  onCursor?: (cb: (p: { x: number; y: number; inside: boolean }) => void) => void;
   onToggleKey?: (cb: (k: string | null) => void) => void;
   toggleMax?: () => void;
   toggleFullscreen?: () => void;
@@ -144,21 +145,30 @@ aether?.onClickThrough?.((on) => {
 // to make it interactive while the cursor is over the (visible) edit handle, so
 // it stays clickable. Moving into the top-right corner pops the handle back.
 // Only fire setInteractive on enter/leave to avoid IPC spam.
+//
+// The cursor coords come from TWO sources: forwarded DOM mousemove (works when
+// the handle has made the window interactive) and a main-process poll over the
+// `onCursor` channel (works even while fully click-through, where forwarded DOM
+// events are unreliable on Windows). Both feed the same hit-test.
 let overHandle = false;
-window.addEventListener("mousemove", (e) => {
+function handleCursor(x: number, y: number) {
   if (!clickThrough) return;
-  if (e.clientX > window.innerWidth - 130 && e.clientY < 110) showHandle();
+  if (x > window.innerWidth - 130 && y < 110) showHandle();
   const r = editHandle.getBoundingClientRect();
   const over =
     !document.body.classList.contains("handle-hidden") &&
-    e.clientX >= r.left &&
-    e.clientX <= r.right &&
-    e.clientY >= r.top &&
-    e.clientY <= r.bottom;
+    x >= r.left &&
+    x <= r.right &&
+    y >= r.top &&
+    y <= r.bottom;
   if (over !== overHandle) {
     overHandle = over;
     aether?.setInteractive?.(over);
   }
+}
+window.addEventListener("mousemove", (e) => handleCursor(e.clientX, e.clientY));
+aether?.onCursor?.((p) => {
+  if (p.inside) handleCursor(p.x, p.y);
 });
 
 // Frameless Electron windows (the overlay AND the default in-app window) are
@@ -232,6 +242,26 @@ const env = (
   }
 ).aetherEnv;
 if (env?.electron) {
+  // Show a dashed outline on the (otherwise invisible) window edges whenever you
+  // move or resize a frameless window, so the bounds are easy to grab; fade it
+  // out 3s after the last interaction. Used by both the floating overlay and the
+  // default in-app window — both are transparent/frameless with no visible edge.
+  let outlineTimer: number | undefined;
+  const showOutline = () => {
+    document.body.classList.remove("outline-hidden");
+    clearTimeout(outlineTimer);
+    outlineTimer = window.setTimeout(
+      () => document.body.classList.add("outline-hidden"),
+      3000
+    );
+  };
+  const enableResizeOutline = () => {
+    showOutline();
+    window.addEventListener("resize", showOutline);
+    window.addEventListener("mousemove", showOutline);
+    window.addEventListener("pointerdown", showOutline);
+  };
+
   // auto-connect to the device's audio (loopback) so it reacts with no setup
   setMotion("system");
   // frameless windows have no native X — show a clickable close button so users
@@ -247,22 +277,7 @@ if (env?.electron) {
     document.body.classList.add("idle", "overlay");
     hideHint();
 
-    // Show an outline on the (otherwise invisible) window edges whenever you go
-    // to move or resize it, so the bounds are easy to grab; fade it out ~4s
-    // after the last interaction.
-    let outlineTimer: number | undefined;
-    const showOutline = () => {
-      document.body.classList.remove("outline-hidden");
-      clearTimeout(outlineTimer);
-      outlineTimer = window.setTimeout(
-        () => document.body.classList.add("outline-hidden"),
-        4000
-      );
-    };
-    showOutline();
-    window.addEventListener("resize", showOutline);
-    window.addEventListener("mousemove", showOutline);
-    window.addEventListener("pointerdown", showOutline);
+    enableResizeOutline();
 
     // Move + double-click maximize on the interior (fills the work area but stays
     // a floating always-on-top window).
@@ -275,6 +290,7 @@ if (env?.electron) {
     // fullscreen are driven via the interior layer (same reason as the overlay),
     // and the "▢ clear" button reveals the desktop behind the window.
     document.body.classList.add("framed");
+    enableResizeOutline();
     setupDragLayer(() => aether?.toggleFullscreen?.());
     dropHint.innerHTML =
       "<strong>Aether</strong>Drag anywhere to move this onto a monitor.<br />" +

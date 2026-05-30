@@ -16,6 +16,12 @@ contextBridge.exposeInMainWorld("aether", {
   onClickThrough: (cb) =>
     ipcRenderer.on("aether:click-through", (_e, on) => cb(!!on)),
   setInteractive: (on) => ipcRenderer.send("aether:set-interactive", !!on),
+  // While click-through, the main process polls the real cursor position and
+  // pushes it here — forwarded DOM mouse events are unreliable once a window is
+  // click-through on Windows, so this is how the renderer knows to pop the
+  // edit handle back when the cursor reaches its corner.
+  onCursor: (cb) =>
+    ipcRenderer.on("aether:cursor", (_e, p) => cb(p)),
   onToggleKey: (cb) =>
     ipcRenderer.on("aether:toggle-key", (_e, k) => cb(k)),
   toggleMax: () => ipcRenderer.send("aether:toggle-max"),

@@ -58,21 +58,32 @@ body.overlay #drag-layer { inset: 14px; }
 body.overlay .controls,
 body.framed .controls { z-index: 10; }
 
-/* ---- overlay mode: a resize outline on the window edges that auto-hides ---- */
-body.overlay::after {
+/* ---- frameless windows (overlay + default): a dashed resize outline on the
+   window edges that auto-hides, so the invisible bounds are easy to grab. Same
+   dashed white-on-dark stroke as the × close button's circle. ---- */
+body.overlay::after,
+body.framed::after {
   content: "";
   position: fixed;
-  inset: 1px;
-  border: 2px dashed rgba(255, 255, 255, 0.9);
-  /* dark 1px lines either side of the dashes so it reads on any wallpaper */
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+  /* inset a few px so the frame sits clearly INSIDE the window — at inset:1px it
+     hugs the very edge where Windows 11's rounded-corner mask clips it, which is
+     why it was nearly invisible on screen. */
+  inset: 4px;
+  border: 3px dashed rgba(255, 255, 255, 1);
+  /* dark halo either side of the dashes so the white reads on any wallpaper */
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.55), inset 0 0 0 1.5px rgba(0, 0, 0, 0.55);
   border-radius: 14px;
   pointer-events: none;
+  /* promote to its own GPU layer so it composites ABOVE the WebGL canvas — on
+     transparent windows the canvas can otherwise paint over plain DOM content. */
+  will-change: opacity;
+  transform: translateZ(0);
   z-index: 9999;
   opacity: 1;
   transition: opacity 0.5s ease;
 }
-body.overlay.outline-hidden::after { opacity: 0; }
+body.overlay.outline-hidden::after,
+body.framed.outline-hidden::after { opacity: 0; }
 /* keep the overlay minimal: just the slime + the compact control bar */
 body.overlay .hud { display: none; }
 

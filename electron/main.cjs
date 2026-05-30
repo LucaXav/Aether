@@ -97,13 +97,40 @@ function attachAsWallpaper(win) {
 // the window must be transparent for it to be useful, which both now are.
 function setupClickThrough(win) {
   let through = false;
+  // Forwarded DOM mouse events are unreliable on Windows once a window is
+  // click-through, so while it's on we poll the real cursor position in the main
+  // process and push client-relative coords to the renderer. That's what lets it
+  // pop the edit handle back when the cursor reaches the handle's corner.
+  let cursorTimer = null;
+  const stopCursorPoll = () => {
+    if (cursorTimer) clearInterval(cursorTimer);
+    cursorTimer = null;
+  };
+  const startCursorPoll = () => {
+    stopCursorPoll();
+    cursorTimer = setInterval(() => {
+      if (win.isDestroyed()) return stopCursorPoll();
+      const pt = screen.getCursorScreenPoint();
+      const b = win.getBounds();
+      const x = pt.x - b.x;
+      const y = pt.y - b.y;
+      win.webContents.send("aether:cursor", {
+        x,
+        y,
+        inside: x >= 0 && y >= 0 && x <= b.width && y <= b.height,
+      });
+    }, 90);
+  };
   const setThrough = (on) => {
     through = !!on;
     // forward:true keeps mouse-move events flowing to the page so its own UI can
     // react, while clicks still pass through to the windows underneath.
     win.setIgnoreMouseEvents(through, { forward: true });
+    if (through) startCursorPoll();
+    else stopCursorPoll();
     if (!win.isDestroyed()) win.webContents.send("aether:click-through", through);
   };
+  win.on("closed", stopCursorPoll);
   ipcMain.on("aether:set-click-through", (_e, on) => setThrough(on));
   // While click-through, the renderer flips this as the cursor enters/leaves the
   // little "edit" handle, so that handle alone stays clickable (a mouse-only way
@@ -137,6 +164,22 @@ function setupClickThrough(win) {
 // Overlay-only: click-through + a "cover the screen" (maximize) toggle and a
 // custom window move, driven by the renderer.
 function setupOverlayInteractions(win) {
+  // Bump the topmost level so clicking another app in "▷ through" mode can't
+  // bring that app above the slime. Default `alwaysOnTop: true` maps to
+  // "floating" on Windows (HWND_TOPMOST), which other topmost windows can
+  // still cover; "screen-saver" sits above normal topmost windows.
+  // visibleOnFullScreen lets it also paint over fullscreen apps on macOS;
+  // on Windows it's a no-op but harmless.
+  win.setAlwaysOnTop(true, "screen-saver");
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Windows occasionally demotes a topmost window when a different one gains
+  // focus. Re-assert every time we lose focus so the slime stays on top while
+  // the user works in apps behind it.
+  win.on("blur", () => {
+    if (win.isDestroyed()) return;
+    win.setAlwaysOnTop(true, "screen-saver");
+  });
+
   setupClickThrough(win);
 
   // Double-click maximize toggle + custom window move. We move/maximize the
@@ -224,6 +267,10 @@ async function createWindow() {
   } else if (OVERLAY) {
     // transparent, always-on-top floating window — draws only the slime so it
     // overlays cleanly on top of anything. Drag to move; Ctrl+Shift+Q to quit.
+    // The window is also focus-skipping (skipTaskbar + focusable:false), so
+    // clicking another app in "▷ through" mode never raises that app above the
+    // overlay — the slime keeps painting on top while you work in whatever's
+    // behind it. We promote the topmost level to "screen-saver" below.
     Object.assign(opts, {
       width: 560,
       height: 560,
@@ -236,6 +283,7 @@ async function createWindow() {
       hasShadow: false,
       resizable: true,
       maximizable: true, // double-click the draggable area to fill the screen
+      skipTaskbar: true,
       title: "Aether Overlay",
     });
   } else {
