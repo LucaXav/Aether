@@ -3,8 +3,6 @@
 A floating, audio-reactive **slime ball** that paints on top of your screen and
 wobbles to the music. Click through it to keep working — the slime stays.
 
-![Aether slime on the desktop](docs/screenshot.png)
-
 ---
 
 ## Download (Windows)
