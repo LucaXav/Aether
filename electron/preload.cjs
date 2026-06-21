@@ -29,5 +29,10 @@ contextBridge.exposeInMainWorld("aether", {
   dragStart: (p) => ipcRenderer.send("aether:drag-start", p),
   dragMove: (p) => ipcRenderer.send("aether:drag-move", p),
   dragEnd: () => ipcRenderer.send("aether:drag-end"),
+  // Custom edge/corner resize (frameless transparent windows don't resize
+  // reliably from the native edges once drag regions are involved).
+  resizeStart: (p) => ipcRenderer.send("aether:resize-start", p),
+  resizeMove: (p) => ipcRenderer.send("aether:resize-move", p),
+  resizeEnd: () => ipcRenderer.send("aether:resize-end"),
   quit: () => ipcRenderer.send("aether:quit"),
 });

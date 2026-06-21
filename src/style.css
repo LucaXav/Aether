@@ -91,6 +91,29 @@ body.framed.outline-hidden::after { opacity: 0; }
 /* keep the overlay minimal: just the slime + the compact control bar */
 body.overlay .hud { display: none; }
 
+/* ---- resize grips: invisible strips on every edge + corner of the frameless
+   windows so you can pinch any side to reshape (native edge-resize is flaky on
+   transparent windows with drag regions). They sit in the uncovered rim outside
+   the move-layer; corners sit above the edges so corners resize diagonally. ---- */
+.rz { display: none; }
+body.overlay .rz,
+body.framed .rz {
+  display: block;
+  position: fixed;
+  z-index: 5; /* above the move-layer (1), below the controls (10) + close btn */
+  -webkit-app-region: no-drag;
+}
+body.passthrough .rz { display: none; } /* no resizing while click-through */
+.rz-n { top: 0; left: 14px; right: 14px; height: 14px; cursor: ns-resize; }
+.rz-s { bottom: 0; left: 14px; right: 14px; height: 14px; cursor: ns-resize; }
+.rz-e { right: 0; top: 14px; bottom: 14px; width: 14px; cursor: ew-resize; }
+.rz-w { left: 0; top: 14px; bottom: 14px; width: 14px; cursor: ew-resize; }
+.rz-ne, .rz-nw, .rz-se, .rz-sw { width: 20px; height: 20px; z-index: 6; }
+.rz-ne { top: 0; right: 0; cursor: nesw-resize; }
+.rz-nw { top: 0; left: 0; cursor: nwse-resize; }
+.rz-se { bottom: 0; right: 0; cursor: nwse-resize; }
+.rz-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+
 /* click-through mode: hide every bit of chrome so only the visuals sit on top
    of your apps (input passes straight through to whatever is behind). */
 body.passthrough .controls { opacity: 0 !important; pointer-events: none; }

@@ -19,6 +19,9 @@ interface AetherBridge {
   dragStart?: (p: { x: number; y: number }) => void;
   dragMove?: (p: { x: number; y: number }) => void;
   dragEnd?: () => void;
+  resizeStart?: (p: { edge: string; x: number; y: number }) => void;
+  resizeMove?: (p: { x: number; y: number }) => void;
+  resizeEnd?: () => void;
   quit?: () => void;
 }
 const aether = (window as Window & { aether?: AetherBridge }).aether;
@@ -218,6 +221,35 @@ function setupDragLayer(onDoubleClick: () => void) {
   });
 }
 
+// Invisible resize grips on every edge + corner so the frameless window can be
+// pinched from any side (native edge-resize is unreliable on transparent windows
+// with drag regions — only one edge worked). Each grip reports its edge + the
+// cursor's screen position; main.cjs turns that into new window bounds.
+function setupResizeGrips() {
+  const edges = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+  let activeEdge: string | null = null;
+  for (const edge of edges) {
+    const grip = document.createElement("div");
+    grip.className = `rz rz-${edge}`;
+    document.body.appendChild(grip);
+    grip.addEventListener("mousedown", (e) => {
+      if (clickThrough || e.button !== 0) return;
+      activeEdge = edge;
+      aether?.resizeStart?.({ edge, x: e.screenX, y: e.screenY });
+      e.preventDefault();
+      e.stopPropagation(); // don't let the move-layer also start a drag
+    });
+  }
+  window.addEventListener("mousemove", (e) => {
+    if (activeEdge) aether?.resizeMove?.({ x: e.screenX, y: e.screenY });
+  });
+  window.addEventListener("mouseup", () => {
+    if (!activeEdge) return;
+    activeEdge = null;
+    aether?.resizeEnd?.();
+  });
+}
+
 function reflectStyle(name: string) {
   btnStyle.textContent = "◆ " + name;
   if (brandStyle) brandStyle.textContent = "· " + name;
@@ -302,8 +334,9 @@ if (env?.electron) {
     enableResizeOutline();
 
     // Move + double-click maximize on the interior (fills the work area but stays
-    // a floating always-on-top window).
+    // a floating always-on-top window); grips on every edge to reshape it.
     setupDragLayer(() => aether?.toggleMax?.());
+    setupResizeGrips();
   } else if (env.wallpaper) {
     document.body.classList.add("idle");
     hideHint();
@@ -314,6 +347,7 @@ if (env?.electron) {
     document.body.classList.add("framed");
     enableResizeOutline();
     setupDragLayer(() => aether?.toggleFullscreen?.());
+    setupResizeGrips();
     dropHint.innerHTML =
       "<strong>Aether</strong>Drag anywhere to move this onto a monitor.<br />" +
       "Double-click fills the screen · <b>▢ clear</b> shows the desktop behind · <b>Ctrl+Shift+Q</b> quits.<br />" +

@@ -96,20 +96,27 @@ function setupAudioCapture() {
     systemPreferences.askForMediaAccess("microphone").catch(() => {});
   }
 
-  // Device-audio ("● audio") mode: auto-pick a screen source with loopback audio
-  // so getDisplayMedia returns the system mix. If no source is available (e.g.
-  // Screen Recording permission not granted on macOS) we hand back an empty
-  // response so the renderer rejects and can tell the user what to allow.
-  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
-    desktopCapturer
-      .getSources({ types: ["screen"] })
-      .then((sources) =>
-        sources && sources.length
-          ? callback({ video: sources[0], audio: "loopback" })
-          : callback({})
-      )
-      .catch(() => callback({}));
-  });
+  // Device-audio ("● audio") mode: capture the system audio mix via
+  // getDisplayMedia. On macOS we prefer the native system picker, which shows
+  // the proper Screen Recording / audio permission UI and lets the user grant
+  // access — without it, capture just silently fails so you're stuck on self/mic.
+  // The fallback handler auto-picks a screen source with loopback audio for
+  // platforms/OS versions without the picker (and hands back an empty response
+  // when nothing is available, so the renderer can tell the user what to allow).
+  const useSystemPicker = process.platform === "darwin";
+  session.defaultSession.setDisplayMediaRequestHandler(
+    (_request, callback) => {
+      desktopCapturer
+        .getSources({ types: ["screen"] })
+        .then((sources) =>
+          sources && sources.length
+            ? callback({ video: sources[0], audio: "loopback" })
+            : callback({})
+        )
+        .catch(() => callback({}));
+    },
+    { useSystemPicker }
+  );
 }
 
 function attachAsWallpaper(win) {
@@ -224,6 +231,46 @@ function setupClickThrough(win) {
   if (!win.isDestroyed()) win.webContents.send("aether:toggle-key", toggleKey);
 }
 
+// Custom edge/corner resize driven by the renderer. Frameless transparent
+// windows don't resize reliably from the native edges once -webkit-app-region
+// drag regions are in play (only one edge tended to work), so the renderer puts
+// invisible grips on every edge/corner and we compute the new bounds here from
+// the original bounds + the cursor delta. Anchors the opposite edge so dragging
+// the top/left grows from that side instead of shifting the whole window.
+function setupResize(win) {
+  let rz = null;
+  ipcMain.on("aether:resize-start", (_e, p) => {
+    rz = { edge: String(p.edge), b: win.getBounds(), x: p.x, y: p.y };
+  });
+  ipcMain.on("aether:resize-move", (_e, p) => {
+    if (!rz || win.isDestroyed()) return;
+    const [minW, minH] = win.getMinimumSize();
+    const mw = minW || 220;
+    const mh = minH || 220;
+    const dx = Math.round(p.x - rz.x);
+    const dy = Math.round(p.y - rz.y);
+    const b = { x: rz.b.x, y: rz.b.y, width: rz.b.width, height: rz.b.height };
+    const e = rz.edge;
+    if (e.includes("e")) b.width = Math.max(mw, rz.b.width + dx);
+    if (e.includes("s")) b.height = Math.max(mh, rz.b.height + dy);
+    if (e.includes("w")) {
+      b.width = Math.max(mw, rz.b.width - dx);
+      b.x = rz.b.x + (rz.b.width - b.width); // keep the right edge fixed
+    }
+    if (e.includes("n")) {
+      b.height = Math.max(mh, rz.b.height - dy);
+      b.y = rz.b.y + (rz.b.height - b.height); // keep the bottom edge fixed
+    }
+    win.setBounds(b);
+  });
+  ipcMain.on("aether:resize-end", () => {
+    rz = null;
+  });
+  win.on("closed", () => {
+    rz = null;
+  });
+}
+
 // Overlay-only: click-through + a "cover the screen" (maximize) toggle and a
 // custom window move, driven by the renderer.
 function setupOverlayInteractions(win) {
@@ -244,6 +291,7 @@ function setupOverlayInteractions(win) {
   });
 
   setupClickThrough(win);
+  setupResize(win);
 
   // Double-click maximize toggle + custom window move. We move/maximize the
   // window from here (via setBounds/setPosition) because transparent windows
@@ -280,6 +328,7 @@ function setupOverlayInteractions(win) {
 // fullscreen via plain DOM events through these channels (mirrors the overlay).
 function setupFramedInteractions(win) {
   setupClickThrough(win);
+  setupResize(win);
   ipcMain.on("aether:toggle-fullscreen", () => {
     win.setFullScreen(!win.isFullScreen());
   });
