@@ -45,33 +45,42 @@ const barMid = byId<HTMLSpanElement>("bar-mid");
 const barTreble = byId<HTMLSpanElement>("bar-treble");
 const beatEl = byId<HTMLDivElement>("beat");
 
-// One simple control for how the slime moves: on its own (no audio), reacting
-// to device audio, or reacting to the mic. Tapping cycles through them.
-type Motion = "off" | "system" | "mic";
-let motion: Motion = "off";
+// One control for how the slime moves: on its own (a lively built-in motion that
+// needs no permissions), reacting to device audio, or reacting to the mic.
+// Tapping cycles through them. "self" is the default so it's alive the instant it
+// opens — no screen-share or mic prompt until you actually ask for one.
+type Motion = "self" | "system" | "mic";
+let motion: Motion = "self";
 function reflectAudio() {
-  btnAudio.textContent = { off: "○ move", system: "● audio", mic: "◉ mic" }[motion];
-  btnAudio.classList.toggle("active", motion !== "off");
+  btnAudio.textContent = { self: "◇ self", system: "● audio", mic: "◉ mic" }[motion];
+  // highlight the button whenever it's reacting to real sound (not self motion)
+  btnAudio.classList.toggle("active", motion !== "self");
 }
 async function setMotion(next: Motion) {
-  if (next !== "off") {
+  if (next === "self") {
+    // built-in autonomous motion — drop any live audio source so the slime
+    // drives itself off its internal signal (lively, not frozen).
+    audio.setDemo();
+  } else {
     try {
       if (next === "system") await audio.useSystemAudio();
       else await audio.useMic();
       console.log("AETHER_AUDIO", next);
     } catch (e) {
-      // couldn't grab that source — fall back to moving on its own
+      // couldn't grab that source (permission denied / no audio track) —
+      // fall back to moving on its own instead of freezing.
       console.log("AETHER_AUDIO fail", (e as Error)?.message);
-      next = "off";
+      audio.setDemo();
+      next = "self";
     }
   }
   motion = next;
-  viz.setAudioMotion(next !== "off");
+  viz.setAudioMotion(true); // always animate; "self" just uses the built-in signal
   reflectAudio();
-  if (next !== "off") dropHint.classList.add("hidden");
+  dropHint.classList.add("hidden");
 }
 btnAudio.onclick = () => {
-  const order: Motion[] = ["off", "system", "mic"];
+  const order: Motion[] = ["self", "system", "mic"];
   setMotion(order[(order.indexOf(motion) + 1) % order.length]);
 };
 
@@ -94,6 +103,7 @@ function setBg(transparent: boolean) {
 }
 btnBg.onclick = () => setBg(!transparentBg);
 reflectBg();
+reflectAudio();
 
 // Click-through: pass mouse/keyboard to whatever's behind the overlay so you
 // can keep coding while the visuals float on top. Once on, the bar can't be
@@ -262,8 +272,9 @@ if (env?.electron) {
     window.addEventListener("pointerdown", showOutline);
   };
 
-  // auto-connect to the device's audio (loopback) so it reacts with no setup
-  setMotion("system");
+  // start in lively self-motion — no screen-share/mic prompt on launch; tap the
+  // motion button to switch to device audio or the mic when you want it.
+  setMotion("self");
   // frameless windows have no native X — show a clickable close button so users
   // can quit with the mouse (skip wallpaper mode, where it sits behind icons).
   if (!env.wallpaper) btnClose.style.display = "grid";

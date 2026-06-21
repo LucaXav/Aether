@@ -12,6 +12,28 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
+// A broken stdout/stderr pipe must never take the app down. When Aether is
+// launched detached, or its parent closes the pipe, the next console.log/error
+// would otherwise throw an uncaught `write EPIPE` and crash the whole app — which
+// showed up as every button (move, clear, …) "breaking" the moment its handler
+// logged. Swallow EPIPE on the std streams and on the process so logging is
+// always safe.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (err) => {
+    if (err && err.code === "EPIPE") return;
+    throw err;
+  });
+}
+process.on("uncaughtException", (err) => {
+  if (err && err.code === "EPIPE") return; // ignore broken-pipe logging errors
+  // Last-resort log; guarded so logging the error can't itself re-crash us.
+  try {
+    process.stderr.write("AETHER_UNCAUGHT " + (err && (err.stack || err.message || err)) + "\n");
+  } catch (_) {
+    /* nothing we can do */
+  }
+});
+
 const DIST = path.join(__dirname, "..", "dist");
 const SMOKE = process.env.AETHER_SMOKE === "1";
 const WALLPAPER =
