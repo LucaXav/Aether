@@ -6,6 +6,7 @@ const {
   screen,
   globalShortcut,
   ipcMain,
+  systemPreferences,
 } = require("electron");
 const http = require("node:http");
 const fs = require("node:fs");
@@ -81,11 +82,32 @@ function startServer() {
   });
 }
 
-function setupLoopbackAudio() {
+function setupAudioCapture() {
+  // Electron denies renderer media requests unless we approve them — without
+  // this, both the mic (getUserMedia) and device audio (getDisplayMedia) modes
+  // silently fail, which is why tapping the motion button "did nothing".
+  session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(true));
+  session.defaultSession.setPermissionCheckHandler(() => true);
+
+  // On macOS, proactively trigger the system microphone prompt so "◉ mic" mode
+  // can actually capture (music played out loud is picked up by the mic). Safe
+  // no-op elsewhere.
+  if (process.platform === "darwin" && systemPreferences.askForMediaAccess) {
+    systemPreferences.askForMediaAccess("microphone").catch(() => {});
+  }
+
+  // Device-audio ("● audio") mode: auto-pick a screen source with loopback audio
+  // so getDisplayMedia returns the system mix. If no source is available (e.g.
+  // Screen Recording permission not granted on macOS) we hand back an empty
+  // response so the renderer rejects and can tell the user what to allow.
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
     desktopCapturer
       .getSources({ types: ["screen"] })
-      .then((sources) => callback({ video: sources[0], audio: "loopback" }))
+      .then((sources) =>
+        sources && sources.length
+          ? callback({ video: sources[0], audio: "loopback" })
+          : callback({})
+      )
       .catch(() => callback({}));
   });
 }
@@ -277,7 +299,7 @@ function setupFramedInteractions(win) {
 
 async function createWindow() {
   const port = await startServer();
-  setupLoopbackAudio();
+  setupAudioCapture();
 
   /** @type {Electron.BrowserWindowConstructorOptions} */
   const opts = {
@@ -342,6 +364,9 @@ async function createWindow() {
       frame: false,
       transparent: true,
       backgroundColor: "#00000000",
+      // grab the uncovered 14px border (see #drag-layer inset) to reshape it
+      resizable: true,
+      maximizable: true,
       title: "Aether",
     });
   }

@@ -57,6 +57,7 @@ function reflectAudio() {
   btnAudio.classList.toggle("active", motion !== "self");
 }
 async function setMotion(next: Motion) {
+  const requested = next;
   if (next === "self") {
     // built-in autonomous motion — drop any live audio source so the slime
     // drives itself off its internal signal (lively, not frozen).
@@ -67,20 +68,30 @@ async function setMotion(next: Motion) {
       else await audio.useMic();
       console.log("AETHER_AUDIO", next);
     } catch (e) {
-      // couldn't grab that source (permission denied / no audio track) —
-      // fall back to moving on its own instead of freezing.
+      // couldn't grab that source (permission denied / no audio track) — fall
+      // back to moving on its own, but TELL the user what to allow instead of
+      // silently snapping back so it doesn't look like the button is broken.
       console.log("AETHER_AUDIO fail", (e as Error)?.message);
       audio.setDemo();
       next = "self";
+      flashHint(
+        requested === "mic"
+          ? "Couldn't use the microphone. Allow <em>Microphone</em> for Aether in System Settings &gt; Privacy &gt; Microphone, then tap <em>motion</em> again."
+          : "Couldn't capture device audio. On macOS, allow <em>Screen Recording</em> for Aether in System Settings &gt; Privacy, then tap again. Tip: <em>◉ mic</em> reacts to music playing out loud with no extra setup.",
+        5200
+      );
     }
   }
   motion = next;
   viz.setAudioMotion(true); // always animate; "self" just uses the built-in signal
   reflectAudio();
-  dropHint.classList.add("hidden");
+  if (next !== "self") dropHint.classList.add("hidden");
 }
 btnAudio.onclick = () => {
-  const order: Motion[] = ["self", "system", "mic"];
+  // mic first: it's the reliable "react to music" mode on macOS (it hears music
+  // played out loud). device-audio/loopback is last since it needs Screen
+  // Recording permission and often isn't available.
+  const order: Motion[] = ["self", "mic", "system"];
   setMotion(order[(order.indexOf(motion) + 1) % order.length]);
 };
 

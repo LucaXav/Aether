@@ -54,7 +54,11 @@ body.framed #drag-layer {
   -webkit-app-region: no-drag;
   cursor: move;
 }
-body.overlay #drag-layer { inset: 14px; }
+/* Inset the move-layer on BOTH frameless windows so a border of the window is
+   left uncovered for native edge-resize — without this the layer eats every
+   edge-grab and turns it into a window move, so the window can't be reshaped. */
+body.overlay #drag-layer,
+body.framed #drag-layer { inset: 14px; }
 body.overlay .controls,
 body.framed .controls { z-index: 10; }
 
